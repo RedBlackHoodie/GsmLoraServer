@@ -33,7 +33,7 @@ type LoRaData struct {
 }
 
 type Packet struct {
-	RequestId int       `json:"id"`
+	RequestId int32     `json:"id"`
 	RSSI      int       `json:"rssi"`
 	SNRL      float64   `json:"snrl"`
 	SNRG      float32   `json:"snrg"`

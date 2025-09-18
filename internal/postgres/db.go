@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"time"
 
-	""
+	"Lora_Esp_Gsm_Gps_project/internal/models"
 )
+
+var ErrNotFound = errors.New("Not found")
 
 type Repo struct {
 	db *sql.DB
@@ -19,19 +21,19 @@ func NewPostgresRepo(db *sql.DB) *Repo {
 	}
 }
 
-func (r *Repo) Save() error {
-	_, err := r.db.Exec("INSERT INTO links (short, original, created_at) VALUES ($1, $2, $3) ON CONFLICT (short) DO NOTHING", shortURL, originalURL, time.Now())
+func (r *Repo) Save(packet models.Packet) error {
+	_, err := r.db.Exec("INSERT INTO PACKETS (request_id, rssi, snrl, snrg, timestamp) values ($1, $2, $3, $4)", packet.RequestId, packet.RSSI, packet.SNRL, packet.SNRG, time.Now())
 	return err
 }
 
-func (r *Repo) Get(shortURL string, logger *slog.Logger) (string, error) {
-	var originalURL string
-	err := r.db.QueryRow("SELECT original FROM links WHERE short = $1", shortURL).Scan(&originalURL)
+func (r *Repo) Get(requestId int32, logger *slog.Logger) (models.Packet, error) {
+	var packet models.Packet
+	err := r.db.QueryRow("SELECT (request_id, rssi, snrl, snrg, timestamp) FROM PACKETS WHERE request_id = $1", requestId).Scan(&packet)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrNotFound
+			return models.Packet{}, ErrNotFound
 		}
-		return "", err
+		return models.Packet{}, err
 	}
-	return originalURL, nil
+	return packet, nil
 }
