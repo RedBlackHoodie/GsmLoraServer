@@ -1,0 +1,21 @@
+# Binary 
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+bin/
+build/
+dist/
+*.log
+
+# IDE
+.idea/
+.vscode/
+
+# env
+.env
+*.local
