@@ -29,7 +29,7 @@ type LoRaData struct {
 	RSSI      int     `json:"rssi"`
 	SNR       float64 `json:"snr"`
 	Timestamp string  `json:"timestamp"`
-	ErrorBits int     `json:"error_bits"`
+	//ErrorBits int     `json:"error_bits"`
 }
 
 type Packet struct {

@@ -3,9 +3,10 @@ package handlers
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
-	"github.com/adrianmo/go-nmea"
 	"log"
 	"time"
+
+	"github.com/adrianmo/go-nmea"
 )
 
 type GpsParser struct {
@@ -80,7 +81,7 @@ func (p *LoraParser) ParseLoraData(response string) error {
 	lora.RequestId = rawData.RequestId
 	lora.RSSI = rawData.RSSI
 	lora.SNR = rawData.SNR
-	lora.ErrorBits = rawData.ErrorBits
+	//lora.ErrorBits = rawData.ErrorBits
 	p.Timestamp = time.Now()
 	p.Data = &lora
 
