@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-const cfg = configs.LoadConfig()
+var cfg = configs.LoadConfig()
 
 func StartServer() error {
 	port := cfg.Port
