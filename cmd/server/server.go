@@ -2,6 +2,7 @@ package server
 
 import (
 	"Lora_Esp_Gsm_Gps_project/configs"
+	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"bufio"
 	"fmt"
 	"log"
@@ -9,6 +10,7 @@ import (
 )
 
 var cfg = configs.LoadConfig()
+var dataService = service.DataService{}
 
 func StartServer() error {
 	port := cfg.Port
@@ -37,6 +39,7 @@ func handleConnection(conn net.Conn) error {
 	for scanner.Scan() {
 		message := scanner.Text()
 		buffer = append(buffer, message...)
+		go dataService.ProcessPacketData(message)
 		log.Printf("Received message: %v", message)
 	}
 	if err := scanner.Err(); err != nil {

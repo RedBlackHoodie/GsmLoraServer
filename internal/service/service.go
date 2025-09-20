@@ -1,62 +1,69 @@
 package service
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
+	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"fmt"
+	"log"
 )
 
 type DataService struct {
-	loraChan   chan *models.LoRaData
-	gpsChan    chan *models.GPSData
 	packetChan chan *models.Packet
+	repo       postgres.Repo
 }
 
 func NewDataService() *DataService {
 	return &DataService{
-		loraChan:   make(chan *models.LoRaData, 100),
-		gpsChan:    make(chan *models.GPSData, 100),
 		packetChan: make(chan *models.Packet, 100),
+		repo:       postgres.Repo{},
 	}
 }
 
-func (s *DataService) ProcessDataFromLora(data *models.LoRaData) error {
-	ok := data == &models.LoRaData{}
-	if !ok {
-		fmt.Println("LoRa data empty!")
+func (s *DataService) GetChannelStatus() (int, int) {
+	return len(s.packetChan), cap(s.packetChan)
+}
+
+func (s *DataService) GetChannelUsage() float64 {
+	current, capacity := s.GetChannelStatus()
+	return float64(current) / float64(capacity) * 100
+}
+
+func (s *DataService) GetPacketChannel() <-chan *models.Packet {
+	return s.packetChan
+}
+
+func (s *DataService) ProcessPacketData(buffer string) error {
+	parser := handlers.PacketParser{}
+	data, err := parser.ParsePacketData(buffer)
+
+	if err != nil {
+		log.Fatal("Unexpected error while parsing packet: ", err)
 	}
+
 	select {
-	case s.loraChan <- data:
+	case s.packetChan <- &data:
 	default:
-		fmt.Printf("Channel full, logging data: %+v\n", data)
+		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
+		s.repo.Save(&data)
+		_ = s.DrainChannel()
 	}
+	log.Printf("Data channel usage :%f", s.GetChannelUsage())
 
 	return nil
 }
 
-func (s *DataService) ProcessDataFromGPS(data *models.GPSData) error {
-	ok := data == &models.GPSData{}
-	if !ok {
-		fmt.Println("Gps data empty!")
+func (s *DataService) DrainChannel() error {
+	for i := 0; i < len(s.packetChan); i++ {
+		select {
+		case packet := <-s.packetChan:
+			err := s.repo.Save(packet)
+			if err != nil {
+				log.Printf("Error saving packet during drain: %v", err)
+			}
+		}
 	}
-	select {
-	case s.gpsChan <- data:
-	default:
-		fmt.Printf("Channel full, logging data: %+v\n", data)
-	}
-
-	return nil
-}
-
-func (s *DataService) ProcessPacketData(packet *models.Packet) error {
-	ok := packet == &models.Packet{}
-	if !ok {
-		fmt.Println("Packet data empty!")
-	}
-	select {
-	case s.packetChan <- packet:
-	default:
-		fmt.Printf("Channel full, logging data: %+v\n", packet)
-	}
+	log.Printf("Data channel drain completed")
 
 	return nil
 }
