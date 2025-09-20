@@ -88,7 +88,7 @@ func (p *LoraParser) ParseLoraData(response string) error {
 	return nil
 }
 
-func (p *PacketParser) ParsePacketData(response string) error {
+func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	rawData := PacketParser{}
 	if err := json.Unmarshal([]byte(response), &rawData); err != nil {
 		p.RequestId = rawData.RequestId
@@ -98,12 +98,11 @@ func (p *PacketParser) ParsePacketData(response string) error {
 	packet.RequestId = rawData.RequestId
 	packet.RSSI = rawData.Data.RSSI
 	packet.SNRL = rawData.Data.SNRL
-	packet.SNRG = rawData.Data.SNRG
 	packet.Coordinate = rawData.Data.Coordinate
 	packet.Hdop = rawData.Data.Hdop
 	packet.Timestamp = rawData.Data.Timestamp
 	p.Timestamp = time.Now()
 	p.Data = &packet
 
-	return nil
+	return packet, nil
 }
