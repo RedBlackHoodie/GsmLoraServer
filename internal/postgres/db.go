@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"log/slog"
 	"time"
 
 	"Lora_Esp_Gsm_Gps_project/internal/models"
@@ -60,6 +59,16 @@ func (r *Repo) CreatePacketsTable() error {
 	return err
 }
 
+func (r *Repo) CreateClientsTable() error {
+	_, err := r.db.Exec(`
+		CREATE TABLE IF NOT EXISTS client (
+			id INTEGER PRIMARY KEY,
+			
+		)
+	`)
+	return err
+}
+
 func (r *Repo) Save(packet *models.Packet) error {
 	_, err := r.db.Exec("INSERT INTO PACKETS "+
 		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp) values ($1, $2, $3, $4, $5. $6, $7)",
@@ -74,29 +83,29 @@ func (r *Repo) Save(packet *models.Packet) error {
 	return err
 }
 
-func (r *Repo) Get(requestId int32, logger *slog.Logger) (models.Packet, error) {
-	var packet models.Packet
-	err := r.db.QueryRow(
-		"SELECT"+
-			" request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
-		requestId,
-	).Scan(
-		&packet.RequestId,
-		&packet.RSSI,
-		&packet.SNRL,
-		&packet.Coordinate.Latitude,
-		&packet.Coordinate.Longitude,
-		&packet.Hdop,
-		&packet.Timestamp,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return models.Packet{}, ErrNotFound
-		}
-		return models.Packet{}, err
-	}
-	return packet, nil
-}
+//func (r *Repo) Get(requestId int32, logger *slog.Logger) (models.Packet, error) {
+//	var packet models.Packet
+//	err := r.db.QueryRow(
+//		"SELECT"+
+//			" request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
+//		requestId,
+//	).Scan(
+//		&packet.RequestId,
+//		&packet.RSSI,
+//		&packet.SNRL,
+//		&packet.Coordinate.Latitude,
+//		&packet.Coordinate.Longitude,
+//		&packet.Hdop,
+//		&packet.Timestamp,
+//	)
+//	if err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return models.Packet{}, ErrNotFound
+//		}
+//		return models.Packet{}, err
+//	}
+//	return packet, nil
+//}
 
 func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
 	rows, err := r.db.Query(
