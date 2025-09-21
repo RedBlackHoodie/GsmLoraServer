@@ -1,13 +1,17 @@
 package postgres
 
 import (
+	"Lora_Esp_Gsm_Gps_project/configs"
 	"database/sql"
 	"errors"
-	"log/slog"
+	"fmt"
+	"log"
 	"time"
 
-	""
+	"Lora_Esp_Gsm_Gps_project/internal/models"
 )
+
+var ErrNotFound = errors.New("Not found")
 
 type Repo struct {
 	db *sql.DB
@@ -19,19 +23,126 @@ func NewPostgresRepo(db *sql.DB) *Repo {
 	}
 }
 
-func (r *Repo) Save() error {
-	_, err := r.db.Exec("INSERT INTO links (short, original, created_at) VALUES ($1, $2, $3) ON CONFLICT (short) DO NOTHING", shortURL, originalURL, time.Now())
+func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
+		config.DbHost, config.DbPort, config.DbUser, config.DbPassword, config.DbName)
+
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+
+	if err := db.Ping(); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(10 * time.Minute)
+
+	log.Println("Successfully connected to PostgreSQL!")
+	return db, nil
+}
+
+func (r *Repo) CreatePacketsTable() error {
+	_, err := r.db.Exec(`
+		CREATE TABLE IF NOT EXISTS packets (
+			request_id INTEGER PRIMARY KEY,
+			rssi INTEGER NOT NULL,
+			snrl DOUBLE PRECISION NOT NULL,
+			latitude INTEGER NOT NULL,
+			longitude INTEGER NOT NULL,
+			hdop DOUBLE PRECISION NOT NULL,
+			timestamp VARCHAR(55) NOT NULL
+		)
+	`)
 	return err
 }
 
-func (r *Repo) Get(shortURL string, logger *slog.Logger) (string, error) {
-	var originalURL string
-	err := r.db.QueryRow("SELECT original FROM links WHERE short = $1", shortURL).Scan(&originalURL)
+func (r *Repo) CreateClientsTable() error {
+	_, err := r.db.Exec(`
+		CREATE TABLE IF NOT EXISTS client (
+			id INTEGER PRIMARY KEY,
+			
+		)
+	`)
+	return err
+}
+
+func (r *Repo) Save(packet *models.Packet) error {
+	_, err := r.db.Exec("INSERT INTO PACKETS "+
+		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp) values ($1, $2, $3, $4, $5. $6, $7)",
+		packet.RequestId,
+		packet.RSSI,
+		packet.SNRL,
+		packet.Coordinate.Latitude,
+		packet.Coordinate.Longitude,
+		packet.Hdop,
+		packet.Timestamp,
+	)
+	return err
+}
+
+//func (r *Repo) Get(requestId int32, logger *slog.Logger) (models.Packet, error) {
+//	var packet models.Packet
+//	err := r.db.QueryRow(
+//		"SELECT"+
+//			" request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
+//		requestId,
+//	).Scan(
+//		&packet.RequestId,
+//		&packet.RSSI,
+//		&packet.SNRL,
+//		&packet.Coordinate.Latitude,
+//		&packet.Coordinate.Longitude,
+//		&packet.Hdop,
+//		&packet.Timestamp,
+//	)
+//	if err != nil {
+//		if errors.Is(err, sql.ErrNoRows) {
+//			return models.Packet{}, ErrNotFound
+//		}
+//		return models.Packet{}, err
+//	}
+//	return packet, nil
+//}
+
+func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
+	rows, err := r.db.Query(
+		"SELECT "+
+			"request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
+		requestId,
+	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return "", ErrNotFound
+			return []models.Packet{}, ErrNotFound
 		}
-		return "", err
 	}
-	return originalURL, nil
+	var packets []models.Packet
+	for rows.Next() {
+		var packet models.Packet
+		err := rows.Scan(
+			&packet.RequestId,
+			&packet.RSSI,
+			&packet.SNRL,
+			&packet.Coordinate.Latitude,
+			&packet.Coordinate.Longitude,
+			&packet.Hdop,
+			&packet.Timestamp,
+		)
+		if err != nil {
+			return nil, err
+		}
+		packets = append(packets, packet)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if len(packets) == 0 {
+		return nil, ErrNotFound
+	}
+
+	return packets, nil
 }

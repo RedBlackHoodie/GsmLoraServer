@@ -1,10 +1,9 @@
 package configs
 
 import (
+	"github.com/joho/godotenv"
 	"log"
 	"os"
-
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -15,6 +14,13 @@ type Config struct {
 	DbName     string
 	DbHost     string
 	Env        string
+}
+
+type EspConfig struct {
+	EspHost string
+	EspPort string
+	EspMac  string
+	EspIP   string
 }
 
 func getenv(key, def string) string {
@@ -36,5 +42,17 @@ func LoadConfig() *Config {
 		DbName:     getenv("DB_NAME", "server"),
 		DbHost:     getenv("DB_HOST", "localhost"),
 		Env:        getenv("ENV", "dev"),
+	}
+}
+
+func LoadEspConfig() *EspConfig {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No esp .env file found")
+	}
+	return &EspConfig{
+		EspHost: getenv("ESP_HOST", "localhost"),
+		EspPort: getenv("ESP_PORT", "9090"),
+		EspMac:  getenv("ESP_MAC", "FF:FF:FF:FF:FF"),
+		EspIP:   getenv("ESP_IP", "127.0.0.1"),
 	}
 }
