@@ -83,7 +83,6 @@ func (p *LoraParser) ParseLoraData(response string) error {
 	lora.RequestId = rawData.RequestId
 	lora.RSSI = rawData.RSSI
 	lora.SNR = rawData.SNR
-	//lora.ErrorBits = rawData.ErrorBits
 	p.Timestamp = time.Now()
 	p.Data = &lora
 
