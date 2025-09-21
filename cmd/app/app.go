@@ -30,7 +30,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Esp not found", err)
 	}
-	err = utils.UpdateEnvFile("esp32.env", "ESP_IP", ip)
+	err = utils.UpdateEnvFile("esp.env", "ESP_IP", ip)
 	if err != nil {
 		fmt.Println("Error updating .env file:", err)
 		return

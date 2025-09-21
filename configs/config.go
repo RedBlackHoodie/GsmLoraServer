@@ -47,7 +47,7 @@ func LoadConfig() *Config {
 
 func LoadEspConfig() *EspConfig {
 	if err := godotenv.Load(); err != nil {
-		log.Println("No esp .env file found")
+		log.Println("No esp.env file found")
 	}
 	return &EspConfig{
 		EspHost: getenv("ESP_HOST", "localhost"),

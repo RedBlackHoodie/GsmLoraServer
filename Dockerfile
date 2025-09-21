@@ -15,6 +15,17 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -X main.version=${VERSION}
 FROM alpine:latest
 
 RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add \
+    \
+    arp-scan \
+    iputils \      \
+    net-tools \   \
+    tcpdump \      \
+    curl \        \
+    nmap \        \
+    && rm -rf /var/cache/apk/*
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /root/
 
@@ -22,6 +33,10 @@ COPY --from=builder /app/main .
 
 COPY --from=builder /app/configs configs/
 COPY --from=builder /app/.env .env
+
+RUN chown -R appuser:appgroup /app
+
+USER appuser
 
 EXPOSE 8080
 
