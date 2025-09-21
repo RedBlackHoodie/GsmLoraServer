@@ -11,7 +11,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 )
 
-var ErrNotFound = errors.New("Not found")
+var ErrNotFound = errors.New("not found")
 
 type Repo struct {
 	db *sql.DB
@@ -26,10 +26,25 @@ func NewPostgresRepo(db *sql.DB) *Repo {
 func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
 		config.DbHost, config.DbPort, config.DbUser, config.DbPassword, config.DbName)
+	var db *sql.DB
+	var err error
 
-	db, err := sql.Open("pgx", dsn)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+	for i := 0; i < 5; i++ {
+		db, err = sql.Open("pgx", dsn)
+		if err != nil {
+			log.Printf("Failed to open database (attempt %d): %v", i+1, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		err = db.Ping()
+		if err != nil {
+			log.Printf("Failed to ping database (attempt %d): %v", i+1, err)
+			time.Sleep(2 * time.Second)
+			continue
+		}
+
+		break
 	}
 
 	if err := db.Ping(); err != nil {

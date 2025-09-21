@@ -1,7 +1,6 @@
 package service
 
 import (
-	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
@@ -51,7 +50,7 @@ func (s *DataService) ProcessPacketData(buffer string) error {
 	data, err := parser.ParsePacketData(buffer)
 
 	if err != nil {
-		log.Printf("Unexpected error while parsing packet: ", err)
+		log.Printf("Unexpected error while parsing packet: %v", err)
 	}
 
 	select {
@@ -60,9 +59,14 @@ func (s *DataService) ProcessPacketData(buffer string) error {
 		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
 		err := s.repo.Save(&data)
 		if err != nil {
-			log.Printf("Unexpected error while saving data: ", err)
+			log.Printf("Unexpected error while saving data: %v", err)
 		}
-		go s.DrainDataChannel()
+		go func() {
+			err := s.DrainDataChannel()
+			if err != nil {
+				log.Printf("Error during channel drain: %v", err)
+			}
+		}()
 	}
 	log.Printf("Data channel usage :%f", s.GetChannelUsage())
 
@@ -130,7 +134,7 @@ func (s *DataService) processPackets() {
 func (s *DataService) processInterfaceRequests() {
 	config := configs.LoadEspConfig()
 	for params := range s.interfaceRequests {
-		err := server.SendParamsToDevice(config.EspIP, config.EspPort, *params)
+		err := handlers.SendParamsToDevice(config.EspIP, config.EspPort, *params)
 		if err != nil {
 			log.Printf("Error sending params to device: %v", err)
 		} else {

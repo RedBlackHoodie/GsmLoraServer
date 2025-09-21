@@ -2,7 +2,6 @@ package server
 
 import (
 	"Lora_Esp_Gsm_Gps_project/configs"
-	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"bufio"
 	"fmt"
@@ -41,7 +40,12 @@ func StartServer() error {
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error starting server: %v", err))
 	}
-	defer listener.Close()
+	defer func(listener net.Listener) {
+		err := listener.Close()
+		if err != nil {
+			log.Printf("Error closing listener: %v", err)
+		}
+	}(listener)
 	defer deleteAllClients()
 	log.Printf("Server started listening on port %v", port)
 	for {
@@ -50,12 +54,22 @@ func StartServer() error {
 			log.Fatalln(fmt.Errorf("error accepting connection: %v", err.Error()))
 		}
 		log.Printf("Accepted connection from %v", conn.RemoteAddr())
-		go handleConnection(conn)
+		go func() {
+			err := handleConnection(conn)
+			if err != nil {
+				log.Printf("Error handling connection: %v", err)
+			}
+		}()
 	}
 }
 
 func handleConnection(conn net.Conn) error {
-	defer conn.Close()
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}(conn)
 	buffer := make([]byte, 1024)
 	scanner := bufio.NewScanner(conn)
 	count := 0
@@ -63,11 +77,21 @@ func handleConnection(conn net.Conn) error {
 		message := scanner.Text()
 		buffer = append(buffer, message...)
 		if strings.Contains(message, "request_id") {
-			go dataService.ProcessPacketData(message)
+			go func() {
+				err := dataService.ProcessPacketData(message)
+				if err != nil {
+					log.Printf("Error processing packet data: %v", err)
+				}
+			}()
 			registerClient("Master"+strconv.Itoa(count), conn)
 		} else {
 			registerClient("interface"+strconv.Itoa(count), conn)
-			go dataService.ProcessInterfaceRequest(message)
+			go func() {
+				err := dataService.ProcessInterfaceRequest(message)
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
 		}
 		count++
 		log.Printf("Received message: %v", message)
@@ -76,30 +100,6 @@ func handleConnection(conn net.Conn) error {
 		fmt.Println("Error reading:", err.Error())
 		return err
 	}
-	return nil
-}
-
-func SendParamsToDevice(ip string, port string, config models.Params) error {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
-		return err
-	}
-	defer conn.Close()
-
-	log.Printf("Connected to device %v", ip)
-
-	message := fmt.Sprintf("sf: %f", config.Sf, ",tx: %f", config.Tx, ",bw: %f", config.Bandwidth)
-
-	_, err = conn.Write([]byte(message))
-
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message: %v", err))
-		return err
-	}
-	log.Printf("Sent params: %v", message)
 	return nil
 }
 
@@ -120,7 +120,11 @@ func unregisterClient(deviceID string) {
 	defer ServerInst.mutex.Unlock()
 
 	if client, exists := ServerInst.clients[deviceID]; exists {
-		client.conn.Close()
+		err := client.conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection for client %s: %v", deviceID, err)
+			return
+		}
 		delete(ServerInst.clients, deviceID)
 		log.Printf("Unregistered client: %s", deviceID)
 	}
