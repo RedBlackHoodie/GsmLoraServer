@@ -14,7 +14,7 @@ import (
 )
 
 var cfg = configs.LoadConfig()
-var dataService = service.DataService{}
+var dataService = service.NewDataService()
 
 type Client struct {
 	conn            net.Conn
@@ -31,7 +31,7 @@ var ServerInst = &Server{
 	clients: make(map[string]*Client),
 }
 
-func StartServer() error {
+func (s *Server) StartServer() error {
 	port := cfg.Port
 
 	log.Printf("Starting server on port %v", port)
