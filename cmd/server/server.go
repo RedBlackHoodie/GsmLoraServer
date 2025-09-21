@@ -79,12 +79,13 @@ func handleConnection(conn net.Conn) error {
 	return nil
 }
 
-func SendParamsToDevice(ip string, port string, config models.Params) {
+func SendParamsToDevice(ip string, port string, config models.Params) error {
 	target := ip + ":" + port
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		return err
 	}
 	defer conn.Close()
 
@@ -96,8 +97,10 @@ func SendParamsToDevice(ip string, port string, config models.Params) {
 
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error sending message: %v", err))
+		return err
 	}
 	log.Printf("Sent params: %v", message)
+	return nil
 }
 
 func registerClient(deviceID string, conn net.Conn) {

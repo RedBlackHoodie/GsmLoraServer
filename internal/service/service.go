@@ -1,6 +1,8 @@
 package service
 
 import (
+	"Lora_Esp_Gsm_Gps_project/cmd/server"
+	"Lora_Esp_Gsm_Gps_project/configs"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
@@ -126,9 +128,9 @@ func (s *DataService) processPackets() {
 }
 
 func (s *DataService) processInterfaceRequests() {
+	config := configs.LoadEspConfig()
 	for params := range s.interfaceRequests {
-
-		err := s.sendParamsToDevice(params)
+		err := server.SendParamsToDevice(config.EspIP, config.EspPort, *params)
 		if err != nil {
 			log.Printf("Error sending params to device: %v", err)
 		} else {
