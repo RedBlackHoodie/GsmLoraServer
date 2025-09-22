@@ -1,11 +1,11 @@
 package main
 
 import (
+	"Lora_Esp_Gsm_Gps_project/cmd/app"
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
-	"Lora_Esp_Gsm_Gps_project/internal/postgres"
+	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/utils"
-	"database/sql"
 	"fmt"
 	"log"
 	"os"
@@ -31,37 +31,39 @@ func main() {
 		}
 	}(logFile)
 
-	hostname := "esp32-6FAD74"
-	mac := "7C:9E:BD:6F:AD:74"
-
-	ip, err := utils.ResolveEspHost(hostname, mac)
+	espCfg := configs.LoadEspConfig()
+	ip, err := utils.ResolveEspHost(espCfg.EspHost, espCfg.EspMac)
 
 	if err != nil {
 		fmt.Println("Esp not found", err)
 	}
-	err = utils.UpdateEnvFile("esp32.env", "ESP_IP", ip)
+	err = utils.UpdateEnvFile("esp.env", "ESP_IP", ip)
 	if err != nil {
 		fmt.Println("Error updating .env file:", err)
 		return
 	}
-	repo := postgres.NewPostgresRepo(nil)
+	app := app.New()
+
 	dbCfg := configs.LoadConfig()
-	db, err := repo.NewPostgresDB(*dbCfg)
+	err = app.InitDB(dbCfg)
 
 	if err != nil {
 		fmt.Println("Error connecting to database:", err)
 		return
 	}
 
-	defer func(db *sql.DB) {
-		err := db.Close()
+	defer func() {
+		err := app.Close()
 		if err != nil {
-			fmt.Println("Error closing database:", err)
+			fmt.Println("Error closing app:", err)
 		}
-	}(db)
+	}()
 
-	mainServer := server.ServerInst
-	err = mainServer.StartServer()
+	handlers.Init(app)
+
+	err = app.InitServer(dbCfg)
+
+	server.Init(app)
 	if err != nil {
 		fmt.Println("Error starting server:", err)
 		return

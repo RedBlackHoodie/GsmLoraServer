@@ -1,8 +1,7 @@
 package server
 
 import (
-	"Lora_Esp_Gsm_Gps_project/configs"
-	"Lora_Esp_Gsm_Gps_project/internal/service"
+	"Lora_Esp_Gsm_Gps_project/cmd/app"
 	"bufio"
 	"fmt"
 	"log"
@@ -13,8 +12,11 @@ import (
 	"time"
 )
 
-var cfg = configs.LoadConfig()
-var dataService = service.NewDataService()
+var appInstance *app.App
+
+func Init(app *app.App) {
+	appInstance = app
+}
 
 type Client struct {
 	conn            net.Conn
@@ -27,12 +29,7 @@ type Server struct {
 	mutex   sync.RWMutex
 }
 
-var ServerInst = &Server{
-	clients: make(map[string]*Client),
-}
-
-func (s *Server) StartServer() error {
-	port := cfg.Port
+func (s *Server) StartServer(port string) error {
 
 	log.Printf("Starting server on port %v", port)
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
@@ -78,7 +75,7 @@ func handleConnection(conn net.Conn) error {
 		buffer = append(buffer, message...)
 		if strings.Contains(message, "request_id") {
 			go func() {
-				err := dataService.ProcessPacketData(message)
+				err := appInstance.DataService.ProcessPacketData(message)
 				if err != nil {
 					log.Printf("Error processing packet data: %v", err)
 				}
@@ -87,7 +84,7 @@ func handleConnection(conn net.Conn) error {
 		} else {
 			registerClient("interface"+strconv.Itoa(count), conn)
 			go func() {
-				err := dataService.ProcessInterfaceRequest(message)
+				err := appInstance.DataService.ProcessInterfaceRequest(message)
 				if err != nil {
 					log.Printf("Error processing interface request: %v", err)
 				}
@@ -104,10 +101,10 @@ func handleConnection(conn net.Conn) error {
 }
 
 func registerClient(deviceID string, conn net.Conn) {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
+	appInstance.Server.mutex.Lock()
+	defer appInstance.Server.mutex.Unlock()
 
-	ServerInst.clients[deviceID] = &Client{
+	appInstance.Server.clients[deviceID] = &Client{
 		conn:            conn,
 		lastInteraction: time.Now().String(),
 	}
@@ -116,24 +113,24 @@ func registerClient(deviceID string, conn net.Conn) {
 }
 
 func unregisterClient(deviceID string) {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
+	appInstance.Server.mutex.Lock()
+	defer appInstance.Server.mutex.Unlock()
 
-	if client, exists := ServerInst.clients[deviceID]; exists {
+	if client, exists := appInstance.Server.clients[deviceID]; exists {
 		err := client.conn.Close()
 		if err != nil {
 			log.Printf("Error closing connection for client %s: %v", deviceID, err)
 			return
 		}
-		delete(ServerInst.clients, deviceID)
+		delete(appInstance.Server.clients, deviceID)
 		log.Printf("Unregistered client: %s", deviceID)
 	}
 }
 
 func deleteAllClients() {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
-	for _, client := range ServerInst.clients {
+	appInstance.Server.mutex.Lock()
+	defer appInstance.Server.mutex.Unlock()
+	for _, client := range appInstance.Server.clients {
 		unregisterClient(client.device)
 	}
 }

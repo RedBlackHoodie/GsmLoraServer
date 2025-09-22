@@ -1,15 +1,23 @@
 package handlers
 
 import (
+	"Lora_Esp_Gsm_Gps_project/cmd/app"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/adrianmo/go-nmea"
 )
+
+var appInstance *app.App
+
+func Init(app *app.App) {
+	appInstance = app
+}
 
 type GpsParser struct {
 	Data      *models.GPSData
@@ -135,4 +143,44 @@ func SendParamsToDevice(ip string, port string, config models.Params) error {
 	}
 	log.Printf("Sent params: %v", message)
 	return nil
+}
+
+type Message interface {
+	Type() string
+}
+
+type SetSettingsMessage struct {
+	Params models.Params
+}
+
+type GetDataMessage struct {
+	Data []models.Packet
+}
+
+func (m SetSettingsMessage) Type() string { return "SET_SETTINGS" }
+func (m GetDataMessage) Type() string     { return "GET_MEASUREMENTS" }
+
+type GetMessage struct {
+	What string
+}
+
+func ParseClientMessage(message string) (Message, error) {
+	if strings.HasPrefix(message, "SET_SETTINGS") {
+		par := models.Params{}
+		_, err := fmt.Sscanf(message, "SET_SETTINGS: SF=%f, TX=%f, BW=%f", &par.Sf, &par.Tx, &par.Bandwidth)
+		if err != nil {
+			log.Printf("error parsing params: %v", err)
+		}
+		return SetSettingsMessage{Params: par}, nil
+
+	} else if strings.HasPrefix(message, "GET_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		//data :=
+
+	}
+	return nil, nil
 }
