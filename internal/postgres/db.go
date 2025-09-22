@@ -8,6 +8,8 @@ import (
 	"log"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 )
 

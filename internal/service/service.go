@@ -142,3 +142,7 @@ func (s *DataService) processInterfaceRequests() {
 		}
 	}
 }
+
+func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
+	return nil, nil
+}

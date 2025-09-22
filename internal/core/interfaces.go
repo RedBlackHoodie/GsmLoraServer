@@ -1,6 +1,7 @@
 package core
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"context"
 	"database/sql"
 )
@@ -18,4 +19,10 @@ type App interface {
 	GetRepo() Repository
 	GetService() Service
 	Close() error
+}
+
+type MeasurementHandler interface {
+	ProcessPacketData(msg string) error
+	ProcessInterfaceRequest(msg string) error
+	GetMeasurements(requestID int) ([]models.Packet, error)
 }

@@ -4,7 +4,6 @@ import (
 	"Lora_Esp_Gsm_Gps_project/cmd/app"
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
-	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/utils"
 	"fmt"
 	"log"
@@ -42,30 +41,25 @@ func main() {
 		fmt.Println("Error updating .env file:", err)
 		return
 	}
-	app := app.New()
+	appInstance := app.New()
 
 	dbCfg := configs.LoadConfig()
-	err = app.InitDB(dbCfg)
-
+	err = appInstance.InitDB(dbCfg)
 	if err != nil {
 		fmt.Println("Error connecting to database:", err)
 		return
 	}
+	defer appInstance.Close()
 
-	defer func() {
-		err := app.Close()
-		if err != nil {
-			fmt.Println("Error closing app:", err)
+	appInstance.InitService()
+
+	srv := server.NewServer(appInstance.DataService)
+
+	go func() {
+		if err := srv.StartServer(dbCfg.Port); err != nil {
+			log.Fatalf("Error starting server: %v", err)
 		}
 	}()
 
-	handlers.Init(app)
-
-	err = app.InitServer(dbCfg)
-
-	server.Init(app)
-	if err != nil {
-		fmt.Println("Error starting server:", err)
-		return
-	}
+	select {}
 }

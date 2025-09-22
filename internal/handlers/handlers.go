@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"Lora_Esp_Gsm_Gps_project/cmd/app"
+	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
 	"fmt"
@@ -12,12 +12,6 @@ import (
 
 	"github.com/adrianmo/go-nmea"
 )
-
-var appInstance *app.App
-
-func Init(app *app.App) {
-	appInstance = app
-}
 
 type GpsParser struct {
 	Data      *models.GPSData
@@ -164,7 +158,7 @@ type GetMessage struct {
 	What string
 }
 
-func ParseClientMessage(message string) (Message, error) {
+func ParseClientMessage(h core.MeasurementHandler, message string) (Message, error) {
 	if strings.HasPrefix(message, "SET_SETTINGS") {
 		par := models.Params{}
 		_, err := fmt.Sscanf(message, "SET_SETTINGS: SF=%f, TX=%f, BW=%f", &par.Sf, &par.Tx, &par.Bandwidth)
@@ -179,7 +173,12 @@ func ParseClientMessage(message string) (Message, error) {
 		if err != nil {
 			log.Printf("error parsing get request: %v", err)
 		}
-		//data :=
+		data, err := h.GetMeasurements(requestId)
+		if err != nil {
+			return nil, err
+		}
+
+		return GetDataMessage{Data: data}, nil
 
 	}
 	return nil, nil

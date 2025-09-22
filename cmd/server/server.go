@@ -1,7 +1,8 @@
+// cmd/server/server.go
 package server
 
 import (
-	"Lora_Esp_Gsm_Gps_project/cmd/app"
+	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"bufio"
 	"fmt"
 	"log"
@@ -12,12 +13,6 @@ import (
 	"time"
 )
 
-var appInstance *app.App
-
-func Init(app *app.App) {
-	appInstance = app
-}
-
 type Client struct {
 	conn            net.Conn
 	device          string
@@ -25,8 +20,16 @@ type Client struct {
 }
 
 type Server struct {
-	clients map[string]*Client
-	mutex   sync.RWMutex
+	clients            map[string]*Client
+	mutex              sync.RWMutex
+	measurementHandler core.MeasurementHandler
+}
+
+func NewServer(h core.MeasurementHandler) *Server {
+	return &Server{
+		clients:            make(map[string]*Client),
+		measurementHandler: h,
+	}
 }
 
 func (s *Server) StartServer(port string) error {
@@ -43,7 +46,7 @@ func (s *Server) StartServer(port string) error {
 			log.Printf("Error closing listener: %v", err)
 		}
 	}(listener)
-	defer deleteAllClients()
+	defer s.deleteAllClients()
 	log.Printf("Server started listening on port %v", port)
 	for {
 		conn, err := listener.Accept()
@@ -52,7 +55,7 @@ func (s *Server) StartServer(port string) error {
 		}
 		log.Printf("Accepted connection from %v", conn.RemoteAddr())
 		go func() {
-			err := handleConnection(conn)
+			err := s.handleConnection(conn)
 			if err != nil {
 				log.Printf("Error handling connection: %v", err)
 			}
@@ -60,7 +63,7 @@ func (s *Server) StartServer(port string) error {
 	}
 }
 
-func handleConnection(conn net.Conn) error {
+func (s *Server) handleConnection(conn net.Conn) error {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
@@ -75,16 +78,16 @@ func handleConnection(conn net.Conn) error {
 		buffer = append(buffer, message...)
 		if strings.Contains(message, "request_id") {
 			go func() {
-				err := appInstance.DataService.ProcessPacketData(message)
+				err := s.measurementHandler.ProcessPacketData(message)
 				if err != nil {
 					log.Printf("Error processing packet data: %v", err)
 				}
 			}()
-			registerClient("Master"+strconv.Itoa(count), conn)
+			s.registerClient("Master"+strconv.Itoa(count), conn)
 		} else {
-			registerClient("interface"+strconv.Itoa(count), conn)
+			s.registerClient("interface"+strconv.Itoa(count), conn)
 			go func() {
-				err := appInstance.DataService.ProcessInterfaceRequest(message)
+				err := s.measurementHandler.ProcessInterfaceRequest(message)
 				if err != nil {
 					log.Printf("Error processing interface request: %v", err)
 				}
@@ -100,11 +103,11 @@ func handleConnection(conn net.Conn) error {
 	return nil
 }
 
-func registerClient(deviceID string, conn net.Conn) {
-	appInstance.Server.mutex.Lock()
-	defer appInstance.Server.mutex.Unlock()
+func (s *Server) registerClient(deviceID string, conn net.Conn) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	appInstance.Server.clients[deviceID] = &Client{
+	s.clients[deviceID] = &Client{
 		conn:            conn,
 		lastInteraction: time.Now().String(),
 	}
@@ -112,25 +115,25 @@ func registerClient(deviceID string, conn net.Conn) {
 	log.Printf("Registered client: %s", deviceID)
 }
 
-func unregisterClient(deviceID string) {
-	appInstance.Server.mutex.Lock()
-	defer appInstance.Server.mutex.Unlock()
+func (s *Server) unregisterClient(deviceID string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if client, exists := appInstance.Server.clients[deviceID]; exists {
+	if client, exists := s.clients[deviceID]; exists {
 		err := client.conn.Close()
 		if err != nil {
 			log.Printf("Error closing connection for client %s: %v", deviceID, err)
 			return
 		}
-		delete(appInstance.Server.clients, deviceID)
+		delete(s.clients, deviceID)
 		log.Printf("Unregistered client: %s", deviceID)
 	}
 }
 
-func deleteAllClients() {
-	appInstance.Server.mutex.Lock()
-	defer appInstance.Server.mutex.Unlock()
-	for _, client := range appInstance.Server.clients {
-		unregisterClient(client.device)
+func (s *Server) deleteAllClients() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, client := range s.clients {
+		s.unregisterClient(client.device)
 	}
 }

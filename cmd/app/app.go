@@ -3,7 +3,6 @@ package app
 import (
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
-	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"database/sql"
@@ -33,7 +32,7 @@ func (a *App) InitDB(cfg *configs.Config) error {
 }
 
 func (a *App) InitServer(cfg *configs.Config) error {
-	a.Server = &server.Server{}
+	a.Server = server.NewServer(a.DataService)
 	go func() {
 		err := a.Server.StartServer(cfg.Port)
 		if err != nil {
