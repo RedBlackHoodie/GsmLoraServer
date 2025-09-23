@@ -10,7 +10,6 @@ import (
 
 type App struct {
 	DB          *sql.DB
-	Repo        *postgres.Repo
 	Server      *server.Server
 	DataService *service.DataService
 }
@@ -27,7 +26,7 @@ func (a *App) InitDB(cfg *configs.Config) error {
 	}
 
 	a.DB = db
-	a.Repo = repo
+	a.DataService.Repo = *repo
 	return nil
 }
 
@@ -53,15 +52,3 @@ func (a *App) Close() error {
 	}
 	return nil
 }
-
-//func (a *App) GetDB() *sql.DB {
-//	return a.DB
-//}
-//
-//func (a *App) GetRepo() core.Repository {
-//	return a.Repo
-//}
-//
-//func (a *App) GetService() core.Service {
-//	return a.Service
-//}

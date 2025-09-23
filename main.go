@@ -49,7 +49,12 @@ func main() {
 		fmt.Println("Error connecting to database:", err)
 		return
 	}
-	defer appInstance.Close()
+	defer func(appInstance *app.App) {
+		err := appInstance.Close()
+		if err != nil {
+			fmt.Println("Error closing app:", err)
+		}
+	}(appInstance)
 
 	appInstance.InitService()
 
