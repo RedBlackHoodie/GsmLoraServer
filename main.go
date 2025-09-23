@@ -13,7 +13,7 @@ import (
 
 var (
 	version   = "dev"
-	buildTime = time.Now()
+	buildTime = time.Now().String()
 )
 
 func main() {
