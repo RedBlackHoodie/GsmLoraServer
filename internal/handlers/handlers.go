@@ -150,9 +150,21 @@ type SetSettingsMessage struct {
 type GetDataMessage struct {
 	Data []models.Packet
 }
+type StartMeasurementMessage struct {
+	RequestId int
+}
 
-func (m SetSettingsMessage) Type() string { return "SET_SETTINGS" }
-func (m GetDataMessage) Type() string     { return "GET_MEASUREMENTS" }
+type StopMeasurementMessage struct {
+	RequestId int
+}
+
+type UnknownMessageMessage struct{}
+
+func (m SetSettingsMessage) Type() string      { return "SET_SETTINGS" }
+func (m GetDataMessage) Type() string          { return "GET_MEASUREMENT" }
+func (m StartMeasurementMessage) Type() string { return "START_MEASUREMENT" }
+func (m StopMeasurementMessage) Type() string  { return "STOP_MEASUREMENT" }
+func (m UnknownMessageMessage) Type() string   { return "UNKNOWN" }
 
 type GetMessage struct {
 	What string
@@ -179,7 +191,21 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 
 		return GetDataMessage{Data: data}, nil
-
+	} else if strings.HasPrefix(message, "START_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		return StartMeasurementMessage{RequestId: requestId}, nil
+	} else if strings.HasPrefix(message, "STOP_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		return StopMeasurementMessage{RequestId: requestId}, nil
 	}
-	return nil, nil
+
+	return UnknownMessageMessage{}, nil
 }
