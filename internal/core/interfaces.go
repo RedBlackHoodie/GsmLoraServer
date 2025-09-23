@@ -23,6 +23,8 @@ type App interface {
 
 type MeasurementHandler interface {
 	ProcessPacketData(msg string) error
-	ProcessInterfaceRequest(msg string) error
+	ProcessInterfaceSettingChange(msg string) error
 	GetMeasurements(requestID int) ([]models.Packet, error)
+	SendMeasurementCommand(ip, port, command string) error
+	SendMeasurementsToClient(ip, port, command string) error
 }

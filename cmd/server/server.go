@@ -1,9 +1,13 @@
-// cmd/server/server.go
 package server
 
 import (
+	"Lora_Esp_Gsm_Gps_project/configs"
 	"Lora_Esp_Gsm_Gps_project/internal/core"
+	"Lora_Esp_Gsm_Gps_project/internal/handlers"
+	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -76,22 +80,52 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	for scanner.Scan() {
 		message := scanner.Text()
 		buffer = append(buffer, message...)
-		if strings.Contains(message, "request_id") {
+		parsedMsg, err := handlers.ParseClientMessage(s.measurementHandler, message)
+		if err != nil {
+			log.Printf("Error parsing message: %v", err)
+		}
+		body, err := s.handleParsedMessage(parsedMsg)
+		if err != nil {
+			log.Printf("Error getting message type message: %v", err)
+		}
+		if strings.HasPrefix(body, "SET_SETTINGS") {
+			s.registerClient("settings-change"+strconv.Itoa(count), conn)
 			go func() {
-				err := s.measurementHandler.ProcessPacketData(message)
-				if err != nil {
-					log.Printf("Error processing packet data: %v", err)
-				}
-			}()
-			s.registerClient("Master"+strconv.Itoa(count), conn)
-		} else {
-			s.registerClient("interface"+strconv.Itoa(count), conn)
-			go func() {
-				err := s.measurementHandler.ProcessInterfaceRequest(message)
+				err := s.measurementHandler.ProcessInterfaceSettingChange(message)
 				if err != nil {
 					log.Printf("Error processing interface request: %v", err)
 				}
 			}()
+		} else if strings.HasPrefix(body, "START_MEASUREMENT") {
+			s.registerClient("start_meas"+strconv.Itoa(count), conn)
+			go func() {
+				espCfg := configs.LoadEspConfig()
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "START_MEASUREMENT")
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else if strings.HasPrefix(body, "STOP_MEASUREMENT") {
+			s.registerClient("stop_meas"+strconv.Itoa(count), conn)
+			go func() {
+				espCfg := configs.LoadEspConfig()
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "STOP_MEASUREMENT")
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else if strings.HasPrefix(body, "GET_MEASUREMENT:") {
+			s.registerClient("get_meas"+strconv.Itoa(count), conn)
+			go func() {
+				clientCfg := configs.LoadClientConfig()
+				data := strings.TrimPrefix(body, "GET_MEASUREMENT:")
+				err := s.measurementHandler.SendMeasurementsToClient(clientCfg.ClientIp, clientCfg.ClientPort, data)
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else {
+			log.Printf("Error processing message, no such command: %v", message)
 		}
 		count++
 		log.Printf("Received message: %v", message)
@@ -135,5 +169,53 @@ func (s *Server) deleteAllClients() {
 	defer s.mutex.Unlock()
 	for _, client := range s.clients {
 		s.unregisterClient(client.device)
+	}
+}
+
+func (s *Server) handleParsedMessage(msg handlers.Message) (string, error) {
+	switch m := msg.(type) {
+	case handlers.SetSettingsMessage:
+		return fmt.Sprintf("SET_SETTINGS sf: %f, tx: %f, bw: %f", m.Params.Sf, m.Params.Tx, m.Params.Bandwidth), nil
+
+	case handlers.GetDataMessage:
+		if len(m.Data) == 0 {
+			return `{"status": "empty"}`, errors.New("no data received")
+		}
+		response := struct {
+			Status    string          `json:"status"`
+			Count     int             `json:"count"`
+			RequestID int             `json:"request_id,omitempty"`
+			Data      []models.Packet `json:"data"`
+			Timestamp string          `json:"timestamp"`
+		}{
+			Status:    "success",
+			Count:     len(m.Data),
+			Data:      m.Data,
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+		if len(m.Data) > 0 {
+			response.RequestID = m.Data[0].RequestId
+		}
+
+		jsonData, err := json.Marshal(response)
+		if err != nil {
+			return "", fmt.Errorf("error marshaling data: %v", err)
+		}
+		toSend := "GET_MEASUREMENT: " + string(jsonData)
+		return toSend, nil
+
+	case handlers.StartMeasurementMessage:
+		log.Printf("MEASUREMENT_START for request %d", m.RequestId)
+		return fmt.Sprintf("START_MEASUREMENT: %d", m.RequestId), nil
+
+	case handlers.StopMeasurementMessage:
+		log.Printf("MEASUREMENT_STOP%d", m.RequestId)
+		return fmt.Sprintf("MEASUREMENT_STOP%d", m.RequestId), nil
+
+	case handlers.UnknownMessageMessage:
+		return "UNKNOWN_COMMAND", nil
+
+	default:
+		return "", fmt.Errorf("unhandled message type: %T", msg)
 	}
 }
