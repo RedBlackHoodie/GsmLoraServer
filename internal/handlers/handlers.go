@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
+	"fmt"
 	"log"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/adrianmo/go-nmea"
@@ -81,7 +85,6 @@ func (p *LoraParser) ParseLoraData(response string) error {
 	lora.RequestId = rawData.RequestId
 	lora.RSSI = rawData.RSSI
 	lora.SNR = rawData.SNR
-	//lora.ErrorBits = rawData.ErrorBits
 	p.Timestamp = time.Now()
 	p.Data = &lora
 
@@ -105,4 +108,104 @@ func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	p.Data = &packet
 
 	return packet, nil
+}
+
+func SendParamsToDevice(ip string, port string, config models.Params) error {
+	target := ip + ":" + port
+	timeout := 10 * time.Second
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		return err
+	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}(conn)
+
+	log.Printf("Connected to device %v", ip)
+
+	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
+
+	_, err = conn.Write([]byte(message))
+
+	if err != nil {
+		log.Fatalln(fmt.Errorf("error sending message: %v", err))
+		return err
+	}
+	log.Printf("Sent params: %v", message)
+	return nil
+}
+
+type Message interface {
+	Type() string
+}
+
+type SetSettingsMessage struct {
+	Params models.Params
+}
+
+type GetDataMessage struct {
+	Data []models.Packet
+}
+type StartMeasurementMessage struct {
+	RequestId int
+}
+
+type StopMeasurementMessage struct {
+	RequestId int
+}
+
+type UnknownMessageMessage struct{}
+
+func (m SetSettingsMessage) Type() string      { return "SET_SETTINGS" }
+func (m GetDataMessage) Type() string          { return "GET_MEASUREMENT" }
+func (m StartMeasurementMessage) Type() string { return "START_MEASUREMENT" }
+func (m StopMeasurementMessage) Type() string  { return "STOP_MEASUREMENT" }
+func (m UnknownMessageMessage) Type() string   { return "UNKNOWN" }
+
+type GetMessage struct {
+	What string
+}
+
+func ParseClientMessage(h core.MeasurementHandler, message string) (Message, error) {
+	if strings.HasPrefix(message, "SET_SETTINGS") {
+		par := models.Params{}
+		_, err := fmt.Sscanf(message, "SET_SETTINGS: SF=%f, TX=%f, BW=%f", &par.Sf, &par.Tx, &par.Bandwidth)
+		if err != nil {
+			log.Printf("error parsing params: %v", err)
+		}
+		return SetSettingsMessage{Params: par}, nil
+
+	} else if strings.HasPrefix(message, "GET_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		data, err := h.GetMeasurements(requestId)
+		if err != nil {
+			return nil, err
+		}
+
+		return GetDataMessage{Data: data}, nil
+	} else if strings.HasPrefix(message, "START_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		return StartMeasurementMessage{RequestId: requestId}, nil
+	} else if strings.HasPrefix(message, "STOP_MEASUREMENTS") {
+		requestId := 0
+		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		if err != nil {
+			log.Printf("error parsing get request: %v", err)
+		}
+		return StopMeasurementMessage{RequestId: requestId}, nil
+	}
+
+	return UnknownMessageMessage{}, nil
 }

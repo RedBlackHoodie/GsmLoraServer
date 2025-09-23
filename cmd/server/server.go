@@ -2,9 +2,12 @@ package server
 
 import (
 	"Lora_Esp_Gsm_Gps_project/configs"
+	"Lora_Esp_Gsm_Gps_project/internal/core"
+	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
-	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"bufio"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -14,9 +17,6 @@ import (
 	"time"
 )
 
-var cfg = configs.LoadConfig()
-var dataService = service.DataService{}
-
 type Client struct {
 	conn            net.Conn
 	device          string
@@ -24,16 +24,19 @@ type Client struct {
 }
 
 type Server struct {
-	clients map[string]*Client
-	mutex   sync.RWMutex
+	clients            map[string]*Client
+	mutex              sync.RWMutex
+	measurementHandler core.MeasurementHandler
 }
 
-var ServerInst = &Server{
-	clients: make(map[string]*Client),
+func NewServer(h core.MeasurementHandler) *Server {
+	return &Server{
+		clients:            make(map[string]*Client),
+		measurementHandler: h,
+	}
 }
 
-func StartServer() error {
-	port := cfg.Port
+func (s *Server) StartServer(port string) error {
 
 	log.Printf("Starting server on port %v", port)
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
@@ -41,8 +44,13 @@ func StartServer() error {
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error starting server: %v", err))
 	}
-	defer listener.Close()
-	defer deleteAllClients()
+	defer func(listener net.Listener) {
+		err := listener.Close()
+		if err != nil {
+			log.Printf("Error closing listener: %v", err)
+		}
+	}(listener)
+	defer s.deleteAllClients()
 	log.Printf("Server started listening on port %v", port)
 	for {
 		conn, err := listener.Accept()
@@ -50,24 +58,74 @@ func StartServer() error {
 			log.Fatalln(fmt.Errorf("error accepting connection: %v", err.Error()))
 		}
 		log.Printf("Accepted connection from %v", conn.RemoteAddr())
-		go handleConnection(conn)
+		go func() {
+			err := s.handleConnection(conn)
+			if err != nil {
+				log.Printf("Error handling connection: %v", err)
+			}
+		}()
 	}
 }
 
-func handleConnection(conn net.Conn) error {
-	defer conn.Close()
+func (s *Server) handleConnection(conn net.Conn) error {
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}(conn)
 	buffer := make([]byte, 1024)
 	scanner := bufio.NewScanner(conn)
 	count := 0
 	for scanner.Scan() {
 		message := scanner.Text()
 		buffer = append(buffer, message...)
-		if strings.Contains(message, "request_id") {
-			go dataService.ProcessPacketData(message)
-			registerClient("Master"+strconv.Itoa(count), conn)
+		parsedMsg, err := handlers.ParseClientMessage(s.measurementHandler, message)
+		if err != nil {
+			log.Printf("Error parsing message: %v", err)
+		}
+		body, err := s.handleParsedMessage(parsedMsg)
+		if err != nil {
+			log.Printf("Error getting message type message: %v", err)
+		}
+		if strings.HasPrefix(body, "SET_SETTINGS") {
+			s.registerClient("settings-change"+strconv.Itoa(count), conn)
+			go func() {
+				err := s.measurementHandler.ProcessInterfaceSettingChange(message)
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else if strings.HasPrefix(body, "START_MEASUREMENT") {
+			s.registerClient("start_meas"+strconv.Itoa(count), conn)
+			go func() {
+				espCfg := configs.LoadEspConfig()
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "START_MEASUREMENT")
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else if strings.HasPrefix(body, "STOP_MEASUREMENT") {
+			s.registerClient("stop_meas"+strconv.Itoa(count), conn)
+			go func() {
+				espCfg := configs.LoadEspConfig()
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "STOP_MEASUREMENT")
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
+		} else if strings.HasPrefix(body, "GET_MEASUREMENT:") {
+			s.registerClient("get_meas"+strconv.Itoa(count), conn)
+			go func() {
+				clientCfg := configs.LoadClientConfig()
+				data := strings.TrimPrefix(body, "GET_MEASUREMENT:")
+				err := s.measurementHandler.SendMeasurementsToClient(clientCfg.ClientIp, clientCfg.ClientPort, data)
+				if err != nil {
+					log.Printf("Error processing interface request: %v", err)
+				}
+			}()
 		} else {
-			registerClient("interface"+strconv.Itoa(count), conn)
-			go dataService.ProcessInterfaceRequest(message)
+			log.Printf("Error processing message, no such command: %v", message)
 		}
 		count++
 		log.Printf("Received message: %v", message)
@@ -79,32 +137,11 @@ func handleConnection(conn net.Conn) error {
 	return nil
 }
 
-func SendParamsToDevice(ip string, port string, config models.Params) {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
-	}
-	defer conn.Close()
+func (s *Server) registerClient(deviceID string, conn net.Conn) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	log.Printf("Connected to device %v", ip)
-
-	message := fmt.Sprintf("sf: %f", config.Sf, ",tx: %f", config.Tx, ",bw: %f", config.Bandwidth)
-
-	_, err = conn.Write([]byte(message))
-
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message: %v", err))
-	}
-	log.Printf("Sent params: %v", message)
-}
-
-func registerClient(deviceID string, conn net.Conn) {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
-
-	ServerInst.clients[deviceID] = &Client{
+	s.clients[deviceID] = &Client{
 		conn:            conn,
 		lastInteraction: time.Now().String(),
 	}
@@ -112,21 +149,73 @@ func registerClient(deviceID string, conn net.Conn) {
 	log.Printf("Registered client: %s", deviceID)
 }
 
-func unregisterClient(deviceID string) {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
+func (s *Server) unregisterClient(deviceID string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if client, exists := ServerInst.clients[deviceID]; exists {
-		client.conn.Close()
-		delete(ServerInst.clients, deviceID)
+	if client, exists := s.clients[deviceID]; exists {
+		err := client.conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection for client %s: %v", deviceID, err)
+			return
+		}
+		delete(s.clients, deviceID)
 		log.Printf("Unregistered client: %s", deviceID)
 	}
 }
 
-func deleteAllClients() {
-	ServerInst.mutex.Lock()
-	defer ServerInst.mutex.Unlock()
-	for _, client := range ServerInst.clients {
-		unregisterClient(client.device)
+func (s *Server) deleteAllClients() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	for _, client := range s.clients {
+		s.unregisterClient(client.device)
+	}
+}
+
+func (s *Server) handleParsedMessage(msg handlers.Message) (string, error) {
+	switch m := msg.(type) {
+	case handlers.SetSettingsMessage:
+		return fmt.Sprintf("SET_SETTINGS sf: %f, tx: %f, bw: %f", m.Params.Sf, m.Params.Tx, m.Params.Bandwidth), nil
+
+	case handlers.GetDataMessage:
+		if len(m.Data) == 0 {
+			return `{"status": "empty"}`, errors.New("no data received")
+		}
+		response := struct {
+			Status    string          `json:"status"`
+			Count     int             `json:"count"`
+			RequestID int             `json:"request_id,omitempty"`
+			Data      []models.Packet `json:"data"`
+			Timestamp string          `json:"timestamp"`
+		}{
+			Status:    "success",
+			Count:     len(m.Data),
+			Data:      m.Data,
+			Timestamp: time.Now().Format(time.RFC3339),
+		}
+		if len(m.Data) > 0 {
+			response.RequestID = m.Data[0].RequestId
+		}
+
+		jsonData, err := json.Marshal(response)
+		if err != nil {
+			return "", fmt.Errorf("error marshaling data: %v", err)
+		}
+		toSend := "GET_MEASUREMENT: " + string(jsonData)
+		return toSend, nil
+
+	case handlers.StartMeasurementMessage:
+		log.Printf("MEASUREMENT_START for request %d", m.RequestId)
+		return fmt.Sprintf("START_MEASUREMENT: %d", m.RequestId), nil
+
+	case handlers.StopMeasurementMessage:
+		log.Printf("MEASUREMENT_STOP%d", m.RequestId)
+		return fmt.Sprintf("MEASUREMENT_STOP%d", m.RequestId), nil
+
+	case handlers.UnknownMessageMessage:
+		return "UNKNOWN_COMMAND", nil
+
+	default:
+		return "", fmt.Errorf("unhandled message type: %T", msg)
 	}
 }
