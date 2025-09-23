@@ -14,15 +14,14 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s -X main.version=${VERSION}
 
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates
-RUN apk --no-cache add \
-    \
+RUN apk update && apk --no-cache add \
+    ca-certificates \
     arp-scan \
-    iputils \      \
-    net-tools \   \
-    tcpdump \      \
-    curl \        \
-    nmap \        \
+    iputils \
+    net-tools \
+    tcpdump \
+    curl \
+    nmap \
     && rm -rf /var/cache/apk/*
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
