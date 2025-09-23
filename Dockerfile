@@ -1,9 +1,9 @@
 FROM alpine:latest
 LABEL authors="spike"
 
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
+WORKDIR /build
 
 COPY go.mod go.sum ./
 RUN go mod download
@@ -29,16 +29,18 @@ RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /root/
 
-COPY --from=builder /app/main .
+COPY --from=builder /main .
 
-COPY --from=builder /app/configs configs/
-COPY --from=builder /app/.env .env
+COPY --from=builder /configs configs/
+COPY --from=builder /db.env db.env
+COPY --from=builder /esp.env esp.env
+COPY --from=builder /client.env client.env
 
-RUN chown -R appuser:appgroup /app
+RUN chown -R appuser:appgroup /
 
 USER appuser
 
 EXPOSE 8080
 
 CMD ["./main"]
-ENTRYPOINT ["top", "-b"]
+# ENTRYPOINT ["top", "-b"]
