@@ -27,7 +27,7 @@ func (a *App) InitDB(cfg *configs.Config) error {
 	}
 
 	a.DB = db
-	a.DataService.Repo = *repo
+	a.DataService.Repo = repo
 	return nil
 }
 

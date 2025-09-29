@@ -16,7 +16,7 @@ import (
 
 type DataService struct {
 	packetChan              chan *models.Packet
-	Repo                    postgres.Repo
+	Repo                    *postgres.Repo
 	interfaceSettingsChange chan *models.Params
 	mu                      sync.RWMutex
 	isProcessing            bool
@@ -25,7 +25,7 @@ type DataService struct {
 func NewDataService() *DataService {
 	service := &DataService{
 		packetChan:              make(chan *models.Packet, 100),
-		Repo:                    postgres.Repo{},
+		Repo:                    &postgres.Repo{},
 		interfaceSettingsChange: make(chan *models.Params, 10),
 	}
 	go service.processPackets()
