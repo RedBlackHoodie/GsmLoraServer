@@ -131,7 +131,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		log.Printf("Received message: %v", message)
 	}
 	if err := scanner.Err(); err != nil {
-		fmt.Println("Error reading:", err.Error())
+		log.Println("Error reading:", err.Error())
 		return err
 	}
 	return nil

@@ -5,7 +5,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
 	"Lora_Esp_Gsm_Gps_project/internal/utils"
-	"fmt"
+	"io"
 	"log"
 	"os"
 	"time"
@@ -17,10 +17,13 @@ var (
 )
 
 func main() {
-	fmt.Printf("Lora ESP GSM GPS Project v.%s (built %s)\n", version, buildTime)
+	log.Printf("Lora ESP GSM GPS Project v.%s (built %s)\n", version, buildTime)
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Printf("Не удалось открыть файл для логов: %v", err)
+	} else {
+		multiWriter := io.MultiWriter(os.Stdout, logFile)
+		log.SetOutput(multiWriter)
 	}
 
 	defer func(logFile *os.File) {
@@ -30,15 +33,17 @@ func main() {
 		}
 	}(logFile)
 
+	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+
 	espCfg := configs.LoadEspConfig()
 	ip, err := utils.ResolveEspHost(espCfg.EspHost, espCfg.EspMac)
 
 	if err != nil {
-		fmt.Println("Esp not found", err)
+		log.Println("Esp not found", err)
 	}
 	err = utils.UpdateEnvFile("esp.env", "ESP_IP", ip)
 	if err != nil {
-		fmt.Println("Error updating .env file:", err)
+		log.Println("Error updating .env file:", err)
 		return
 	}
 	appInstance := app.New()
@@ -48,13 +53,13 @@ func main() {
 
 	err = appInstance.InitDB(dbCfg)
 	if err != nil {
-		fmt.Println("Error connecting to database:", err)
+		log.Println("Error connecting to database:", err)
 		return
 	}
 	defer func(appInstance *app.App) {
 		err := appInstance.Close()
 		if err != nil {
-			fmt.Println("Error closing app:", err)
+			log.Println("Error closing app:", err)
 		}
 	}(appInstance)
 
