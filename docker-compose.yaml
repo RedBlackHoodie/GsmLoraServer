@@ -30,6 +30,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-lora_db}
     network_mode: host
+    extra_hosts:
+      - "postgres:127.0.0.1"
     cap_add:
       - NET_RAW
       - NET_ADMIN
