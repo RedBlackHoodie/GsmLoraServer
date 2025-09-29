@@ -8,6 +8,7 @@
 *.out
 
 bin/
+build/
 dist/
 *.log
 
