@@ -4,10 +4,8 @@ services:
   postgres:
     image: postgres:13-alpine
     container_name: lora-postgres
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
-      POSTGRES_DB: ${DB_NAME:-lora_db}
+    env_file:
+      - db.env
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
