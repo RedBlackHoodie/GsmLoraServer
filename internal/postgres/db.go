@@ -42,22 +42,24 @@ func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
 		err = db.Ping()
 		if err != nil {
 			log.Printf("Failed to ping database (attempt %d): %v", i+1, err)
+			db.Close()
 			time.Sleep(2 * time.Second)
 			continue
 		}
-
 		break
 	}
 
-	if err := db.Ping(); err != nil {
-		return nil, fmt.Errorf("failed to ping database: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database after 5 attempts: %w", err)
 	}
 
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
 	db.SetConnMaxLifetime(10 * time.Minute)
+
 	err = r.CreatePacketsTable()
 	if err != nil {
+		db.Close()
 		return nil, fmt.Errorf("failed to create packets table: %w", err)
 	}
 
@@ -82,7 +84,7 @@ func (r *Repo) CreatePacketsTable() error {
 
 func (r *Repo) Save(packet *models.Packet) error {
 	_, err := r.db.Exec("INSERT INTO PACKETS "+
-		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp) values ($1, $2, $3, $4, $5. $6, $7)",
+		"INSERT (request_id, rssi, snrl, latitude, longitude, hdop, timestamp) values ($1, $2, $3, $4, $5, $6, $7)",
 		packet.RequestId,
 		packet.RSSI,
 		packet.SNRL,
@@ -91,6 +93,9 @@ func (r *Repo) Save(packet *models.Packet) error {
 		packet.Hdop,
 		packet.Timestamp,
 	)
+	if err != nil {
+		return fmt.Errorf("failed to save packet: %w", err)
+	}
 	return err
 }
 
@@ -105,6 +110,7 @@ func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
 			return []models.Packet{}, ErrNotFound
 		}
 	}
+	defer rows.Close()
 	var packets []models.Packet
 	for rows.Next() {
 		var packet models.Packet
