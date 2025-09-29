@@ -25,24 +25,24 @@ func NewPostgresRepo(db *sql.DB) *Repo {
 	}
 }
 
-func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
+func NewPostgresDB(config configs.Config) (*sql.DB, error) {
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s",
 		config.DbHost, config.DbPort, config.DbUser, config.DbPassword, config.DbName)
 
 	var err error
-
+	var db *sql.DB
 	for i := 0; i < 5; i++ {
-		r.db, err = sql.Open("pgx", dsn)
+		db, err = sql.Open("pgx", dsn)
 		if err != nil {
 			log.Printf("Failed to open database (attempt %d): %v", i+1, err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
-		err = r.db.Ping()
+		err = db.Ping()
 		if err != nil {
 			log.Printf("Failed to ping database (attempt %d): %v", i+1, err)
-			r.db.Close()
+			db.Close()
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -53,18 +53,16 @@ func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
 		return nil, fmt.Errorf("failed to connect to database after 5 attempts: %w", err)
 	}
 
-	r.db.SetMaxOpenConns(25)
-	r.db.SetMaxIdleConns(25)
-	r.db.SetConnMaxLifetime(10 * time.Minute)
-
-	err = r.CreatePacketsTable()
-	if err != nil {
-		r.db.Close()
-		return nil, fmt.Errorf("failed to create packets table: %w", err)
-	}
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
+	db.SetConnMaxLifetime(10 * time.Minute)
 
 	log.Println("Successfully connected to PostgreSQL!")
-	return r.db, nil
+	return db, nil
+}
+
+func (r *Repo) InitTables() error {
+	return r.CreatePacketsTable()
 }
 
 func (r *Repo) CreatePacketsTable() error {

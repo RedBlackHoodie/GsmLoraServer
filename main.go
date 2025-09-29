@@ -44,6 +44,8 @@ func main() {
 	appInstance := app.New()
 
 	dbCfg := configs.LoadConfig()
+	appInstance.InitService()
+
 	err = appInstance.InitDB(dbCfg)
 	if err != nil {
 		fmt.Println("Error connecting to database:", err)
@@ -56,8 +58,7 @@ func main() {
 		}
 	}(appInstance)
 
-	appInstance.InitService()
-
+	appInstance.DataService.StartProcessing()
 	srv := server.NewServer(appInstance.DataService)
 
 	go func() {

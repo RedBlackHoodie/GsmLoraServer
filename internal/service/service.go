@@ -25,13 +25,16 @@ type DataService struct {
 func NewDataService() *DataService {
 	service := &DataService{
 		packetChan:              make(chan *models.Packet, 100),
-		Repo:                    &postgres.Repo{},
+		Repo:                    nil,
 		interfaceSettingsChange: make(chan *models.Params, 10),
 	}
-	go service.processPackets()
-	go service.processInterfaceSettingsChange()
 
 	return service
+}
+
+func (s *DataService) StartProcessing() {
+	go s.processPackets()
+	go s.processInterfaceSettingsChange()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
