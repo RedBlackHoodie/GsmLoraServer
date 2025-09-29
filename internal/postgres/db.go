@@ -56,6 +56,10 @@ func (r *Repo) NewPostgresDB(config configs.Config) (*sql.DB, error) {
 	db.SetMaxOpenConns(25)
 	db.SetMaxIdleConns(25)
 	db.SetConnMaxLifetime(10 * time.Minute)
+	err = r.CreatePacketsTable()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create packets table: %w", err)
+	}
 
 	log.Println("Successfully connected to PostgreSQL!")
 	return db, nil
