@@ -19,7 +19,8 @@ func New() *App {
 }
 
 func (a *App) InitDB(cfg *configs.Config) error {
-	repo := postgres.NewPostgresRepo(nil)
+	var db *sql.DB
+	repo := postgres.NewPostgresRepo(db)
 	db, err := repo.NewPostgresDB(*cfg)
 	if err != nil {
 		return err
