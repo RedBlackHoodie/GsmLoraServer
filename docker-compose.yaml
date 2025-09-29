@@ -24,7 +24,7 @@ services:
 
   app:
     build: .
-    container_name: lora-app
+    container_name: gsmloraserver_app
     environment:
       DB_HOST: postgres
       DB_PORT: ${DB_PORT:-5432}
