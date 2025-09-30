@@ -6,6 +6,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"database/sql"
+	"fmt"
 )
 
 type App struct {
@@ -19,14 +20,28 @@ func New() *App {
 }
 
 func (a *App) InitDB(cfg *configs.Config) error {
-	repo := postgres.NewPostgresRepo(nil)
-	db, err := repo.NewPostgresDB(*cfg)
+	var db *sql.DB
+	var err error
+	db, err = postgres.NewPostgresDB(*cfg)
 	if err != nil {
 		return err
 	}
 
+	repo := postgres.NewPostgresRepo(db)
+	err, err1 := repo.InitTables()
+	if err != nil || err1 != nil {
+		err := db.Close()
+		if err != nil {
+			return err
+		}
+		return fmt.Errorf("failed to init tables: %w", err)
+	}
+	if a.DataService == nil {
+		a.DataService = service.NewDataService()
+	}
+
 	a.DB = db
-	a.DataService.Repo = *repo
+	a.DataService.Repo = repo
 	return nil
 }
 

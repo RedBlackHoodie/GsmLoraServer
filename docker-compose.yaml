@@ -4,10 +4,8 @@ services:
   postgres:
     image: postgres:13-alpine
     container_name: lora-postgres
-    environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
-      POSTGRES_DB: ${DB_NAME:-lora_db}
+    env_file:
+      - db.env
     ports:
       - "${DB_PORT:-5432}:5432"
     volumes:
@@ -24,7 +22,7 @@ services:
 
   app:
     build: .
-    container_name: lora-app
+    container_name: gsmloraserver_app
     environment:
       DB_HOST: postgres
       DB_PORT: ${DB_PORT:-5432}
@@ -32,6 +30,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-lora_db}
     network_mode: host
+    extra_hosts:
+      - "postgres:127.0.0.1"
     cap_add:
       - NET_RAW
       - NET_ADMIN

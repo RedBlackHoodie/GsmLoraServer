@@ -5,6 +5,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -16,7 +17,7 @@ import (
 
 type DataService struct {
 	packetChan              chan *models.Packet
-	Repo                    postgres.Repo
+	Repo                    *postgres.Repo
 	interfaceSettingsChange chan *models.Params
 	mu                      sync.RWMutex
 	isProcessing            bool
@@ -25,13 +26,16 @@ type DataService struct {
 func NewDataService() *DataService {
 	service := &DataService{
 		packetChan:              make(chan *models.Packet, 100),
-		Repo:                    postgres.Repo{},
+		Repo:                    nil,
 		interfaceSettingsChange: make(chan *models.Params, 10),
 	}
-	go service.processPackets()
-	go service.processInterfaceSettingsChange()
 
 	return service
+}
+
+func (s *DataService) StartProcessing() {
+	go s.processPackets()
+	go s.processInterfaceSettingsChange()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -91,35 +95,35 @@ func (s *DataService) DrainDataChannel() error {
 }
 
 func (s *DataService) ProcessInterfaceSettingChange(message string) error {
-	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS sf: ")
-
-	parts := strings.FieldsFunc(cleanedMessage, func(r rune) bool {
-		return r == ',' || r == ' '
-	})
+	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+	parts := strings.Split(cleanedMessage, ", ")
 
 	params := models.Params{}
 
-	if len(parts) > 0 {
-		sf, err := strconv.ParseFloat(parts[0], 32)
-		if err != nil {
-			return err
+	for _, part := range parts {
+		keyVal := strings.Split(part, "=")
+		if len(keyVal) != 2 {
+			continue
 		}
-		params.Sf = float32(sf)
-	}
-	if len(parts) > 2 {
-		tx, err := strconv.ParseFloat(parts[2], 32)
+
+		key := strings.TrimSpace(keyVal[0])
+		value := strings.TrimSpace(keyVal[1])
+
+		val, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
-		params.Tx = float32(tx)
-	}
-	if len(parts) > 4 {
-		bw, err := strconv.ParseFloat(parts[4], 32)
-		if err != nil {
-			return err
+
+		switch key {
+		case "SF":
+			params.Sf = float32(val)
+		case "TX":
+			params.Tx = float32(val)
+		case "BW":
+			params.Bandwidth = float32(val)
 		}
-		params.Bandwidth = float32(bw)
 	}
+
 	log.Printf("Got params: %+v\n", params)
 	s.interfaceSettingsChange <- &params
 
@@ -156,7 +160,16 @@ func (s *DataService) processInterfaceSettingsChange() {
 	}
 }
 
-func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
+func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) {
+	if requestID == 0 {
+		var err error
+		requestID, err = s.Repo.FindLastRequestId()
+		if err != nil {
+			log.Printf("Error getting last request id: %v", err)
+			return nil, err
+		}
+	}
+
 	data, err := s.Repo.FindById(int32(requestID))
 	if err != nil {
 		log.Printf("Error getting measurements for id: %v %d", err, requestID)
@@ -166,12 +179,12 @@ func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
 	return data, nil
 }
 
-func (s *DataService) SendMeasurementCommand(ip, port, command string) error {
+func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId int) error {
 	target := ip + ":" + port
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -182,15 +195,27 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string) error {
 	}(conn)
 
 	log.Printf("Connected to device %v", ip)
+	if sessionId == 0 {
 
-	_, err = conn.Write([]byte(command))
+		_, err = conn.Write([]byte(command))
 
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
-		return err
+		if err != nil {
+			log.Println(fmt.Errorf("error sending message to esp: %v", err))
+			return err
+		}
+		log.Printf("Sent commands: %v", command)
+		return nil
+	} else {
+		message := fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
+		_, err = conn.Write([]byte(message))
+
+		if err != nil {
+			log.Println(fmt.Errorf("error sending message to esp: %v", err))
+			return err
+		}
+		log.Printf("Sent commands: %v", message)
+		return nil
 	}
-	log.Printf("Sent commands: %v", command)
-	return nil
 }
 
 func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
@@ -198,7 +223,7 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -207,13 +232,78 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 			log.Printf("Error closing connection: %v", err)
 		}
 	}(conn)
-
 	log.Printf("Connected to device %v", ip)
-	_, err = conn.Write([]byte(data))
+	packets, err := s.GetMeasurements(0)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
+		log.Printf("Error getting measurements: %v", err)
+		return err
+	}
+	jsonData, err := json.Marshal(packets)
+	if err != nil {
+		log.Printf("Error marshalling measurements: %v", err)
+		return err
+	}
+	resp := fmt.Sprintf("MEASUREMENT: %s\n", jsonData)
+	_, err = conn.Write([]byte(resp))
+	if err != nil {
+		log.Println(fmt.Errorf("error sending message to client: %v", err))
 		return err
 	}
 	log.Printf("Sent commands: %v", data)
+	return nil
+}
+
+func (s *DataService) SendAllSessions(ip, port, data string) error {
+	target := ip + ":" + port
+	timeout := 10 * time.Second
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
+		return err
+	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}(conn)
+	log.Printf("Connected to device %v", ip)
+	if err != nil {
+		log.Printf("Error marshalling sessions: %v", err)
+		return err
+	}
+	resp := fmt.Sprintf("SESSIONS: %s\n", data)
+	_, err = conn.Write([]byte(resp))
+	if err != nil {
+		log.Println(fmt.Errorf("error sending message to client: %v", err))
+		return err
+	}
+	log.Printf("Sent all sessions data")
+	return nil
+}
+
+func (s *DataService) GetAllSessions() ([]models.Session, error) {
+	sessions, err := s.Repo.GetAllSessions()
+	if err != nil {
+		log.Printf("Error getting all sessions: %v", err)
+		return nil, err
+	}
+	return sessions, nil
+}
+
+func (s *DataService) SaveSession(session models.Session) error {
+	err := s.Repo.SaveSession(session)
+	if err != nil {
+		log.Printf("Error saving session: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (s *DataService) RemoveSession(sessionId int32) error {
+	err := s.Repo.RemoveSession(sessionId)
+	if err != nil {
+		log.Printf("Error removing session: %v", err)
+	}
 	return nil
 }

@@ -4,9 +4,11 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,7 +117,7 @@ func SendParamsToDevice(ip string, port string, config models.Params) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -132,7 +134,7 @@ func SendParamsToDevice(ip string, port string, config models.Params) error {
 	_, err = conn.Write([]byte(message))
 
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message: %v", err))
+		log.Println(fmt.Errorf("error sending message: %v", err))
 		return err
 	}
 	log.Printf("Sent params: %v", message)
@@ -179,19 +181,19 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		return SetSettingsMessage{Params: par}, nil
 
-	} else if strings.HasPrefix(message, "GET_MEASUREMENTS") {
+	} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
 		requestId := 0
-		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		_, err := fmt.Sscanf(message, "SESSION_ID=%d", &requestId)
 		if err != nil {
 			log.Printf("error parsing get request: %v", err)
 		}
-		data, err := h.GetMeasurements(requestId)
+		data, err := h.GetMeasurements(int32(requestId))
 		if err != nil {
 			return nil, err
 		}
 
 		return GetDataMessage{Data: data}, nil
-	} else if strings.HasPrefix(message, "START_MEASUREMENTS") {
+	} else if strings.HasPrefix(message, "START_MEASUREMENT") {
 		requestId := 0
 		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
 		if err != nil {
@@ -208,4 +210,56 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 	}
 
 	return UnknownMessageMessage{}, nil
+}
+
+func ParseSession(data string) (models.Session, error) {
+	cleaned := strings.TrimPrefix(data, "ADD_SESSION: ")
+	cleaned = strings.Trim(cleaned, "[]")
+
+	parts := strings.FieldsFunc(cleaned, func(r rune) bool {
+		return r == ',' || r == ' '
+	})
+
+	var cleanParts []string
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			cleanParts = append(cleanParts, strings.TrimSpace(part))
+		}
+	}
+	log.Printf("Raw data: %s", data)
+	log.Printf("Cleaned: %s", cleaned)
+	log.Printf("Parts: %v, len: %d", parts, len(parts))
+
+	var session models.Session
+	if len(cleanParts) != 5 {
+		log.Printf("Error parsing session: %v, got len: %v", data, len(cleanParts))
+		return models.Session{}, errors.New("invalid session format")
+	}
+
+	sessionID, err := strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		log.Printf("Error parsing session: %v", data)
+		return models.Session{}, errors.New("invalid session format")
+	}
+	session.Id = sessionID
+	session.Name = strings.TrimSpace(parts[1])
+	session.StartTime = strings.TrimSpace(parts[2])
+	session.EndTime = strings.TrimSpace(parts[3])
+	count, err := strconv.Atoi(strings.TrimSpace(parts[4]))
+	if err != nil {
+		return session, fmt.Errorf("invalid points: %w", err)
+	}
+	session.Count = count
+	return session, nil
+}
+
+func ParseRemoveSessionMessage(message string) (int, error) {
+	cleaned := strings.TrimPrefix(message, "REMOVE_SESSION: ")
+
+	sessionID, err := strconv.Atoi(strings.TrimSpace(cleaned))
+	if err != nil {
+		return 0, fmt.Errorf("invalid session ID: %w", err)
+	}
+
+	return sessionID, nil
 }
