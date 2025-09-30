@@ -130,7 +130,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			//			log.Printf("Error processing interface request: %v", err)
 			//		}
 			//	}()
-		} else if strings.HasPrefix(message, "GET_MEASUREMENTS_SESSIONS") {
+		} else if strings.HasPrefix(message, "GET_MEASUREMENT_SESSIONS") {
 			s.registerClient("get_sessions"+strconv.Itoa(count), conn)
 			go func() {
 				sessions, err := s.measurementHandler.GetAllSessions()
