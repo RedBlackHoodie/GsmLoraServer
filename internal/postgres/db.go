@@ -84,7 +84,7 @@ func (r *Repo) CreatePacketsTable() error {
 func (r *Repo) CreateSessionsTable() error {
 	_, err := r.db.Exec(`
 		CREATE TABLE IF NOT EXISTS sessions (
-			id SERIAL PRIMARY KEY,
+			id BIGINT PRIMARY KEY,
 			name VARCHAR(100) NOT NULL,
 			start_time TIMESTAMP NOT NULL,
 			end_time TIMESTAMP,
