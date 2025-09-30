@@ -28,8 +28,8 @@ func (a *App) InitDB(cfg *configs.Config) error {
 	}
 
 	repo := postgres.NewPostgresRepo(db)
-	err = repo.InitTables()
-	if err != nil {
+	err, err1 := repo.InitTables()
+	if err != nil || err1 != nil {
 		err := db.Close()
 		if err != nil {
 			return err
