@@ -94,35 +94,35 @@ func (s *DataService) DrainDataChannel() error {
 }
 
 func (s *DataService) ProcessInterfaceSettingChange(message string) error {
-	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS sf: ")
-
-	parts := strings.FieldsFunc(cleanedMessage, func(r rune) bool {
-		return r == ',' || r == ' '
-	})
+	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+	parts := strings.Split(cleanedMessage, ", ")
 
 	params := models.Params{}
 
-	if len(parts) > 0 {
-		sf, err := strconv.ParseFloat(parts[0], 32)
-		if err != nil {
-			return err
+	for _, part := range parts {
+		keyVal := strings.Split(part, "=")
+		if len(keyVal) != 2 {
+			continue
 		}
-		params.Sf = float32(sf)
-	}
-	if len(parts) > 2 {
-		tx, err := strconv.ParseFloat(parts[2], 32)
+
+		key := strings.TrimSpace(keyVal[0])
+		value := strings.TrimSpace(keyVal[1])
+
+		val, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			return err
+			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
-		params.Tx = float32(tx)
-	}
-	if len(parts) > 4 {
-		bw, err := strconv.ParseFloat(parts[4], 32)
-		if err != nil {
-			return err
+
+		switch key {
+		case "SF":
+			params.Sf = float32(val)
+		case "TX":
+			params.Tx = float32(val)
+		case "BW":
+			params.Bandwidth = float32(val)
 		}
-		params.Bandwidth = float32(bw)
 	}
+
 	log.Printf("Got params: %+v\n", params)
 	s.interfaceSettingsChange <- &params
 
