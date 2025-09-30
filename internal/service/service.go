@@ -268,17 +268,11 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 		}
 	}(conn)
 	log.Printf("Connected to device %v", ip)
-	sessions, err := s.GetAllSessions()
-	if err != nil {
-		log.Printf("Error getting all sessions: %v", err)
-		return err
-	}
-	jsonData, err := json.Marshal(sessions)
 	if err != nil {
 		log.Printf("Error marshalling sessions: %v", err)
 		return err
 	}
-	resp := fmt.Sprintf("SESSIONS: %s\n", jsonData)
+	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	_, err = conn.Write([]byte(resp))
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
