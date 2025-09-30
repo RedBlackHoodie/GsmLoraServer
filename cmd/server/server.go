@@ -98,9 +98,15 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			}()
 		} else if strings.HasPrefix(body, "START_MEASUREMENT") {
 			s.registerClient("start_meas"+strconv.Itoa(count), conn)
+			cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
+
+			sessionID, err := strconv.Atoi(strings.TrimSpace(cleaned))
+			if err != nil {
+				return fmt.Errorf("invalid request ID: %w", err)
+			}
 			go func() {
 				espCfg := configs.LoadEspConfig()
-				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "START_MEASUREMENT")
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "START_MEASUREMENT", sessionID)
 				if err != nil {
 					log.Printf("Error processing interface request: %v", err)
 				}
@@ -109,7 +115,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			s.registerClient("stop_meas"+strconv.Itoa(count), conn)
 			go func() {
 				espCfg := configs.LoadEspConfig()
-				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "STOP_MEASUREMENT")
+				err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "STOP_MEASUREMENT", 0)
 				if err != nil {
 					log.Printf("Error processing interface request: %v", err)
 				}
@@ -124,6 +130,52 @@ func (s *Server) handleConnection(conn net.Conn) error {
 					log.Printf("Error processing interface request: %v", err)
 				}
 			}()
+		} else if strings.HasPrefix(message, "GET_MEASUREMENTS_SESSIONS") {
+			s.registerClient("get_sessions"+strconv.Itoa(count), conn)
+			go func() {
+				sessions, err := s.measurementHandler.GetAllSessions()
+				if err != nil {
+					log.Printf("Error getting sessions: %v", err)
+					return
+				}
+				clientCfg := configs.LoadClientConfig()
+				jsonData, err := json.Marshal(sessions)
+				if err != nil {
+					log.Printf("Error marshalling sessions: %v", err)
+					return
+				}
+				err = s.measurementHandler.SendAllSessions(clientCfg.ClientIp, clientCfg.ClientPort, string(jsonData))
+				if err != nil {
+					log.Printf("Error sending sessions to client: %v", err)
+					return
+				}
+			}()
+		} else if strings.HasPrefix(message, "ADD_SESSION") {
+			msg := strings.TrimPrefix(message, "ADD_SESSION: ")
+			session, err := handlers.ParseSession(msg)
+			if err != nil {
+				log.Printf("Error parsing session: %v", err)
+				return err
+			}
+			err = s.measurementHandler.SaveSession(session)
+			if err != nil {
+				log.Printf("Error saving session: %v", err)
+				return err
+			}
+			log.Printf("Session saved: %v", session)
+
+		} else if strings.HasPrefix(message, "REMOVE_SESSION") {
+			sessionId, err := handlers.ParseRemoveSessionMessage(message)
+			if err != nil {
+				log.Printf("Error parsing remove session message: %v", err)
+				return err
+			}
+			err = s.measurementHandler.RemoveSession(int32(sessionId))
+			if err != nil {
+				log.Printf("Error removing session: %v", err)
+				return err
+			}
+			log.Printf("Session removed: %v", sessionId)
 		} else {
 			log.Printf("Error processing message, no such command: %v", message)
 		}

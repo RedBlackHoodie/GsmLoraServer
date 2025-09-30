@@ -179,7 +179,7 @@ func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) 
 	return data, nil
 }
 
-func (s *DataService) SendMeasurementCommand(ip, port, command string) error {
+func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId int) error {
 	target := ip + ":" + port
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
@@ -195,15 +195,27 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string) error {
 	}(conn)
 
 	log.Printf("Connected to device %v", ip)
+	if sessionId == 0 {
 
-	_, err = conn.Write([]byte(command))
+		_, err = conn.Write([]byte(command))
 
-	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
-		return err
+		if err != nil {
+			log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
+			return err
+		}
+		log.Printf("Sent commands: %v", command)
+		return nil
+	} else {
+		message := fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
+		_, err = conn.Write([]byte(message))
+
+		if err != nil {
+			log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
+			return err
+		}
+		log.Printf("Sent commands: %v", message)
+		return nil
 	}
-	log.Printf("Sent commands: %v", command)
-	return nil
 }
 
 func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
@@ -238,5 +250,66 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 		return err
 	}
 	log.Printf("Sent commands: %v", data)
+	return nil
+}
+
+func (s *DataService) SendAllSessions(ip, port, data string) error {
+	target := ip + ":" + port
+	timeout := 10 * time.Second
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		return err
+	}
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Printf("Error closing connection: %v", err)
+		}
+	}(conn)
+	log.Printf("Connected to device %v", ip)
+	sessions, err := s.GetAllSessions()
+	if err != nil {
+		log.Printf("Error getting all sessions: %v", err)
+		return err
+	}
+	jsonData, err := json.Marshal(sessions)
+	if err != nil {
+		log.Printf("Error marshalling sessions: %v", err)
+		return err
+	}
+	resp := fmt.Sprintf("SESSIONS: %s\n", jsonData)
+	_, err = conn.Write([]byte(resp))
+	if err != nil {
+		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
+		return err
+	}
+	log.Printf("Sent all sessions data")
+	return nil
+}
+
+func (s *DataService) GetAllSessions() ([]models.Session, error) {
+	sessions, err := s.Repo.GetAllSessions()
+	if err != nil {
+		log.Printf("Error getting all sessions: %v", err)
+		return nil, err
+	}
+	return sessions, nil
+}
+
+func (s *DataService) SaveSession(session models.Session) error {
+	err := s.Repo.SaveSession(session)
+	if err != nil {
+		log.Printf("Error saving session: %v", err)
+		return err
+	}
+	return nil
+}
+
+func (s *DataService) RemoveSession(sessionId int32) error {
+	err := s.Repo.RemoveSession(sessionId)
+	if err != nil {
+		log.Printf("Error removing session: %v", err)
+	}
 	return nil
 }

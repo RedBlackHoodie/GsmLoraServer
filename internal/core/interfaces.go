@@ -24,7 +24,11 @@ type App interface {
 type MeasurementHandler interface {
 	ProcessPacketData(msg string) error
 	ProcessInterfaceSettingChange(msg string) error
-	GetMeasurements(requestID int) ([]models.Packet, error)
-	SendMeasurementCommand(ip, port, command string) error
+	GetMeasurements(requestID int32) ([]models.Packet, error)
+	SendMeasurementCommand(ip, port, command string, sessionId int) error
 	SendMeasurementsToClient(ip, port, command string) error
+	GetAllSessions() ([]models.Session, error)
+	SendAllSessions(ip, port, data string) error
+	SaveSession(session models.Session) error
+	RemoveSession(sessionId int32) error
 }
