@@ -120,16 +120,16 @@ func (s *Server) handleConnection(conn net.Conn) error {
 					log.Printf("Error processing interface request: %v", err)
 				}
 			}()
-		} else if strings.HasPrefix(body, "GET_MEASUREMENT:") {
-			s.registerClient("get_meas"+strconv.Itoa(count), conn)
-			go func() {
-				clientCfg := configs.LoadClientConfig()
-				data := strings.TrimPrefix(body, "GET_MEASUREMENT:")
-				err := s.measurementHandler.SendMeasurementsToClient(clientCfg.ClientIp, clientCfg.ClientPort, data)
-				if err != nil {
-					log.Printf("Error processing interface request: %v", err)
-				}
-			}()
+			//} else if strings.HasPrefix(body, "GET_MEASUREMENT:") {
+			//	s.registerClient("get_meas"+strconv.Itoa(count), conn)
+			//	go func() {
+			//		clientCfg := configs.LoadClientConfig()
+			//		data := strings.TrimPrefix(body, "GET_MEASUREMENT:")
+			//		err := s.measurementHandler.SendMeasurementsToClient(clientCfg.ClientIp, clientCfg.ClientPort, data)
+			//		if err != nil {
+			//			log.Printf("Error processing interface request: %v", err)
+			//		}
+			//	}()
 		} else if strings.HasPrefix(message, "GET_MEASUREMENTS_SESSIONS") {
 			s.registerClient("get_sessions"+strconv.Itoa(count), conn)
 			go func() {

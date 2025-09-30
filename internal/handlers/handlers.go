@@ -183,7 +183,7 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 
 	} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
 		requestId := 0
-		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		_, err := fmt.Sscanf(message, "SESSION_ID=%d", &requestId)
 		if err != nil {
 			log.Printf("error parsing get request: %v", err)
 		}
