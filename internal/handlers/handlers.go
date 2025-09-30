@@ -214,17 +214,31 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 
 func ParseSession(data string) (models.Session, error) {
 	cleaned := strings.TrimPrefix(data, "ADD_SESSION: ")
-
 	cleaned = strings.Trim(cleaned, "[]")
 
-	parts := strings.Split(cleaned, ",")
+	parts := strings.FieldsFunc(cleaned, func(r rune) bool {
+		return r == ',' || r == ' '
+	})
+
+	var cleanParts []string
+	for _, part := range parts {
+		if strings.TrimSpace(part) != "" {
+			cleanParts = append(cleanParts, strings.TrimSpace(part))
+		}
+	}
+	log.Printf("Raw data: %s", data)
+	log.Printf("Cleaned: %s", cleaned)
+	log.Printf("Parts: %v, len: %d", parts, len(parts))
+
 	var session models.Session
-	if len(parts) != 5 {
+	if len(cleanParts) != 5 {
+		log.Printf("Error parsing session: %v, got len: %v", data, len(cleanParts))
 		return models.Session{}, errors.New("invalid session format")
 	}
 
 	sessionID, err := strconv.Atoi(strings.TrimSpace(parts[0]))
 	if err != nil {
+		log.Printf("Error parsing session: %v", data)
 		return models.Session{}, errors.New("invalid session format")
 	}
 	session.Id = sessionID
