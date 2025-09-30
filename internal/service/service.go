@@ -5,6 +5,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -159,7 +160,16 @@ func (s *DataService) processInterfaceSettingsChange() {
 	}
 }
 
-func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
+func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) {
+	if requestID == 0 {
+		var err error
+		requestID, err = s.Repo.FindLastRequestId()
+		if err != nil {
+			log.Printf("Error getting last request id: %v", err)
+			return nil, err
+		}
+	}
+
 	data, err := s.Repo.FindById(int32(requestID))
 	if err != nil {
 		log.Printf("Error getting measurements for id: %v %d", err, requestID)
@@ -210,9 +220,19 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 			log.Printf("Error closing connection: %v", err)
 		}
 	}(conn)
-
 	log.Printf("Connected to device %v", ip)
-	_, err = conn.Write([]byte(data))
+	packets, err := s.GetMeasurements(0)
+	if err != nil {
+		log.Printf("Error getting measurements: %v", err)
+		return err
+	}
+	jsonData, err := json.Marshal(packets)
+	if err != nil {
+		log.Printf("Error marshalling measurements: %v", err)
+		return err
+	}
+	resp := fmt.Sprintf("MEASUREMENT: %s\n", jsonData)
+	_, err = conn.Write([]byte(resp))
 	if err != nil {
 		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
 		return err

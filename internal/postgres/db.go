@@ -137,3 +137,13 @@ func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
 
 	return packets, nil
 }
+
+func (r *Repo) FindLastRequestId() (int32, error) {
+	var lastRequestId int32
+	err := r.db.QueryRow("SELECT COALESCE(MAX(request_id), 0)" +
+		" FROM packets").Scan(&lastRequestId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last request ID: %w", err)
+	}
+	return lastRequestId, nil
+}
