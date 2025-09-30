@@ -117,7 +117,7 @@ func SendParamsToDevice(ip string, port string, config models.Params) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -134,7 +134,7 @@ func SendParamsToDevice(ip string, port string, config models.Params) error {
 	_, err = conn.Write([]byte(message))
 
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message: %v", err))
+		log.Println(fmt.Errorf("error sending message: %v", err))
 		return err
 	}
 	log.Printf("Sent params: %v", message)

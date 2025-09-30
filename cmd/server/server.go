@@ -42,7 +42,7 @@ func (s *Server) StartServer(port string) error {
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%v", port))
 
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error starting server: %v", err))
+		log.Println(fmt.Errorf("error starting server: %v", err))
 	}
 	defer func(listener net.Listener) {
 		err := listener.Close()
@@ -55,7 +55,7 @@ func (s *Server) StartServer(port string) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Fatalln(fmt.Errorf("error accepting connection: %v", err.Error()))
+			log.Println(fmt.Errorf("error accepting connection: %v", err.Error()))
 		}
 		log.Printf("Accepted connection from %v", conn.RemoteAddr())
 		go func() {

@@ -184,7 +184,7 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -200,7 +200,7 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 		_, err = conn.Write([]byte(command))
 
 		if err != nil {
-			log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
+			log.Println(fmt.Errorf("error sending message to esp: %v", err))
 			return err
 		}
 		log.Printf("Sent commands: %v", command)
@@ -210,7 +210,7 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 		_, err = conn.Write([]byte(message))
 
 		if err != nil {
-			log.Fatalln(fmt.Errorf("error sending message to esp: %v", err))
+			log.Println(fmt.Errorf("error sending message to esp: %v", err))
 			return err
 		}
 		log.Printf("Sent commands: %v", message)
@@ -223,7 +223,7 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -246,7 +246,7 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 	resp := fmt.Sprintf("MEASUREMENT: %s\n", jsonData)
 	_, err = conn.Write([]byte(resp))
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
+		log.Println(fmt.Errorf("error sending message to client: %v", err))
 		return err
 	}
 	log.Printf("Sent commands: %v", data)
@@ -258,7 +258,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -275,7 +275,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	_, err = conn.Write([]byte(resp))
 	if err != nil {
-		log.Fatalln(fmt.Errorf("error sending message to client: %v", err))
+		log.Println(fmt.Errorf("error sending message to client: %v", err))
 		return err
 	}
 	log.Printf("Sent all sessions data")
