@@ -196,6 +196,7 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 
 	log.Printf("Connected to device %v", ip)
 	if sessionId == 0 {
+
 		_, err = conn.Write([]byte(command))
 
 		if err != nil {
@@ -217,21 +218,21 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 	}
 }
 
-func (s *DataService) SendMeasurementsToClient(conn net.Conn, data string) error {
-	//target := ip + ":" + port
-	//timeout := 10 * time.Second
-	//conn, err := net.DialTimeout("tcp", target, timeout)
-	//if err != nil {
-	//	log.Println(fmt.Errorf("error connecting to device: %v", err))
-	//	return err
-	//}
+func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
+	target := ip + ":" + port
+	timeout := 10 * time.Second
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
+		return err
+	}
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
 			log.Printf("Error closing connection: %v", err)
 		}
 	}(conn)
-	log.Printf("Connected to client %v", conn.RemoteAddr())
+	log.Printf("Connected to device %v", ip)
 	packets, err := s.GetMeasurements(0)
 	if err != nil {
 		log.Printf("Error getting measurements: %v", err)
@@ -252,23 +253,25 @@ func (s *DataService) SendMeasurementsToClient(conn net.Conn, data string) error
 	return nil
 }
 
-func (s *DataService) SendAllSessions(conn net.Conn, data string) error {
-	//target := ip + ":" + port
-	//timeout := 10 * time.Second
-	//conn, err := net.DialTimeout("tcp", target, timeout)
-	//if err != nil {
-	//	log.Println(fmt.Errorf("error connecting to device: %v", err))
-	//	return err
-	//}
+func (s *DataService) SendAllSessions(ip, port, data string) error {
+	target := ip + ":" + port
+	timeout := 10 * time.Second
+	conn, err := net.DialTimeout("tcp", target, timeout)
+	if err != nil {
+		log.Println(fmt.Errorf("error connecting to device: %v", err))
+		return err
+	}
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
 			log.Printf("Error closing connection: %v", err)
 		}
 	}(conn)
-
-	log.Printf("Connected to device %v", conn.RemoteAddr())
-	var err error
+	log.Printf("Connected to device %v", ip)
+	if err != nil {
+		log.Printf("Error marshalling sessions: %v", err)
+		return err
+	}
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	_, err = conn.Write([]byte(resp))
 	if err != nil {
