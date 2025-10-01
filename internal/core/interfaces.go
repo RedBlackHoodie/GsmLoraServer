@@ -4,6 +4,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"context"
 	"database/sql"
+	"net"
 )
 
 type Repository interface {
@@ -26,9 +27,9 @@ type MeasurementHandler interface {
 	ProcessInterfaceSettingChange(msg string) error
 	GetMeasurements(requestID int32) ([]models.Packet, error)
 	SendMeasurementCommand(ip, port, command string, sessionId int) error
-	SendMeasurementsToClient(ip, port, command string) error
+	SendMeasurementsToClient(conn net.Conn, command string) error
 	GetAllSessions() ([]models.Session, error)
-	SendAllSessions(ip, port, data string) error
+	SendAllSessions(conn net.Conn, data string) error
 	SaveSession(session models.Session) error
 	RemoveSession(sessionId int32) error
 }
