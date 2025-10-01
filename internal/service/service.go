@@ -258,7 +258,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 	timeout := 10 * time.Second
 	conn, err := net.DialTimeout("tcp", target, timeout)
 	if err != nil {
-		log.Println(fmt.Errorf("error connecting to device: %v", err))
+		log.Println(fmt.Errorf("error connecting to interface: %v", err))
 		return err
 	}
 	defer func(conn net.Conn) {
@@ -268,11 +268,8 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 		}
 	}(conn)
 	log.Printf("Connected to device %v", ip)
-	if err != nil {
-		log.Printf("Error marshalling sessions: %v", err)
-		return err
-	}
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
+	log.Printf("Sent message: %s", resp)
 	_, err = conn.Write([]byte(resp))
 	if err != nil {
 		log.Println(fmt.Errorf("error sending message to client: %v", err))
