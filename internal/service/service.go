@@ -258,13 +258,22 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 	var conn net.Conn
 	var err error
 	for attempt := 0; attempt < 5; attempt++ {
-		timeout := time.Duration(attempt) * 5 * time.Second
-		conn, err = net.DialTimeout("tcp", target, timeout)
+		conn, err = net.Dial("tcp", target)
 		if err == nil {
-			log.Printf("got error while retrying to connect: %v", err)
+			log.Printf("Successfully connected to %s on attempt %v", err, attempt+1)
+			break
 		}
 		log.Printf("Attempt %d failed: %v", attempt, err)
-		time.Sleep(time.Duration(attempt) * time.Second)
+		if attempt < 4 {
+			time.Sleep(time.Duration(attempt) * time.Second)
+		}
+	}
+	if err != nil {
+		log.Printf("failed to connect after 5 attempts: %v", err)
+	}
+	if conn == nil {
+		log.Printf("connection is nil after successful dial")
+		return err
 	}
 	defer func(conn net.Conn) {
 		err := conn.Close()
@@ -272,6 +281,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 			log.Printf("Error closing connection: %v", err)
 		}
 	}(conn)
+
 	log.Printf("Connected to device %v", ip)
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	log.Printf("Sent message: %s", resp)
