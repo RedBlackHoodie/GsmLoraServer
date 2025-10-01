@@ -138,13 +138,22 @@ func (s *Server) handleConnection(conn net.Conn) error {
 					log.Printf("Error getting sessions: %v", err)
 					return
 				}
-				clientCfg := configs.LoadClientConfig()
+				//clientCfg := configs.LoadClientConfig()
 				jsonData, err := json.Marshal(sessions)
 				if err != nil {
 					log.Printf("Error marshalling sessions: %v", err)
 					return
 				}
-				err = s.measurementHandler.SendAllSessions(clientCfg.ClientIp, clientCfg.ClientPort, string(jsonData))
+				var clientPort string
+				var clientIp string
+				ip := conn.RemoteAddr().(*net.TCPAddr)
+				{
+					log.Printf("Client IP: %s", ip.IP.String())
+					log.Printf("Client Port: %s", strconv.Itoa(ip.Port))
+					clientPort = strconv.Itoa(ip.Port)
+					clientIp = ip.IP.String()
+				}
+				err = s.measurementHandler.SendAllSessions(clientIp, clientPort, string(jsonData))
 				if err != nil {
 					log.Printf("Error sending sessions to client: %v", err)
 					return
