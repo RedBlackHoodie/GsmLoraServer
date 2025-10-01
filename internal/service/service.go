@@ -255,11 +255,16 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 
 func (s *DataService) SendAllSessions(ip, port, data string) error {
 	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Println(fmt.Errorf("error connecting to interface: %v", err))
-		return err
+	var conn net.Conn
+	var err error
+	for attempt := 0; attempt < 5; attempt++ {
+		timeout := time.Duration(attempt) * 5 * time.Second
+		conn, err = net.DialTimeout("tcp", target, timeout)
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d failed: %v", attempt, err)
+		time.Sleep(time.Duration(attempt) * time.Second)
 	}
 	defer func(conn net.Conn) {
 		err := conn.Close()
