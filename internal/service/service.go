@@ -261,7 +261,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 		timeout := time.Duration(attempt) * 5 * time.Second
 		conn, err = net.DialTimeout("tcp", target, timeout)
 		if err == nil {
-			break
+			log.Printf("got error while retrying to connect: %v", err)
 		}
 		log.Printf("Attempt %d failed: %v", attempt, err)
 		time.Sleep(time.Duration(attempt) * time.Second)

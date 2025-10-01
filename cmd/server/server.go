@@ -140,9 +140,8 @@ func (s *Server) handleConnection(conn net.Conn) error {
 				}
 				var parts []string
 				for _, session := range sessions {
-					str := fmt.Sprintf("%d, %s, %s, %s, %d", session.Id, session.Name, session.StartTime, session.EndTime, session.Count)
+					str := fmt.Sprintf("[%d, %s, %s, %s, %d]", session.Id, session.Name, session.StartTime, session.EndTime, session.Count)
 					parts = append(parts, str)
-
 				}
 				sessionsStr := strings.Join(parts, ", ")
 				if err != nil {
