@@ -68,12 +68,12 @@ func (s *Server) StartServer(port string) error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) error {
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
+	//defer func(conn net.Conn) {
+	//	err := conn.Close()
+	//	if err != nil {
+	//		log.Printf("Error closing connection: %v", err)
+	//	}
+	//}(conn)
 	buffer := make([]byte, 1024)
 	scanner := bufio.NewScanner(conn)
 	count := 0
@@ -145,19 +145,19 @@ func (s *Server) handleConnection(conn net.Conn) error {
 				}
 				sessionsStr := strings.Join(parts, ", ")
 				if err != nil {
-					log.Printf("Error marshalling sessions: %v", err)
+					log.Printf("Error joining sessions: %v", err)
 					return
 				}
 				var clientPort string
 				var clientIp string
 				ip := conn.RemoteAddr().(*net.TCPAddr)
 				{
-					log.Printf("Client IP: %s", ip.IP.String())
-					log.Printf("Client Port: %s", strconv.Itoa(ip.Port))
 					clientPort = strconv.Itoa(ip.Port)
 					clientIp = ip.IP.String()
+					log.Printf("Client IP: %s", clientIp)
+					log.Printf("Client Port: %s", clientPort)
 				}
-				err = s.measurementHandler.SendAllSessions(clientIp, clientPort, sessionsStr)
+				err = s.measurementHandler.SendAllSessions(conn, sessionsStr)
 				if err != nil {
 					log.Printf("Error sending sessions to client: %v", err)
 					return

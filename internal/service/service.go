@@ -253,24 +253,24 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 	return nil
 }
 
-func (s *DataService) SendAllSessions(ip, port, data string) error {
-	target := ip + ":" + port
-	var conn net.Conn
+func (s *DataService) SendAllSessions(conn net.Conn, data string) error {
+	//target := ip + ":" + port
+	//var conn net.Conn
 	var err error
-	for attempt := 0; attempt < 5; attempt++ {
-		conn, err = net.Dial("tcp", target)
-		if err == nil {
-			log.Printf("Successfully connected to %s on attempt %v", err, attempt+1)
-			break
-		}
-		log.Printf("Attempt %d failed: %v", attempt, err)
-		if attempt < 4 {
-			time.Sleep(time.Duration(attempt) * time.Second)
-		}
-	}
-	if err != nil {
-		log.Printf("failed to connect after 5 attempts: %v", err)
-	}
+	//for attempt := 0; attempt < 5; attempt++ {
+	//	conn, err = net.Dial("tcp", target)
+	//	if err == nil {
+	//		log.Printf("Successfully connected to %s on attempt %v", err, attempt+1)
+	//		break
+	//	}
+	//	log.Printf("Attempt %d failed: %v", attempt, err)
+	//	if attempt < 4 {
+	//		time.Sleep(time.Duration(attempt) * time.Second)
+	//	}
+	//}
+	//if err != nil {
+	//	log.Printf("failed to connect after 5 attempts: %v", err)
+	//}
 	if conn == nil {
 		log.Printf("connection is nil after successful dial")
 		return err
@@ -282,7 +282,7 @@ func (s *DataService) SendAllSessions(ip, port, data string) error {
 		}
 	}(conn)
 
-	log.Printf("Connected to device %v", ip)
+	//log.Printf("Connected to device %v", ip)
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	log.Printf("Sent message: %s", resp)
 	_, err = conn.Write([]byte(resp))
