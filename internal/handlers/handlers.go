@@ -172,6 +172,11 @@ type RemoveSessionMessage struct {
 	SessionId int
 }
 
+type IncomingMeasurementMessage struct {
+	Data      models.Packet
+	sessionId int
+}
+
 type UnknownMessageMessage struct{}
 
 func (m SetSettingsMessage) Type() string            { return "SET_SETTINGS" }
@@ -305,4 +310,18 @@ func ParseTime(timeStr string) (time.Time, error) {
 		return time.Time{}, fmt.Errorf("invalid time format: %w", err)
 	}
 	return parsedTime, nil
+}
+
+func ParseIncomingMeasurement(message string) (IncomingMeasurementMessage, error) {
+	cleaned := strings.TrimPrefix(message, "MEASUREMENT: ")
+	packetParser := PacketParser{}
+	_, err := packetParser.ParsePacketData(cleaned)
+	if err != nil {
+		return IncomingMeasurementMessage{}, fmt.Errorf("error parsing incoming measurement: %w", err)
+	}
+	incoming := IncomingMeasurementMessage{
+		Data:      *packetParser.Data,
+		sessionId: 0,
+	}
+	return incoming, nil
 }

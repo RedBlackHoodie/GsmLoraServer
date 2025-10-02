@@ -18,6 +18,8 @@ type Client struct {
 	conn            net.Conn
 	device          string
 	lastInteraction string
+	isActive        bool
+	mutex           sync.RWMutex
 }
 
 type Server struct {
@@ -68,6 +70,9 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	log.Printf("Client connected from %s", conn.RemoteAddr())
 	scanner := bufio.NewScanner(conn)
 	count := 0
+
+	go s.startConnectionChecker()
+
 	for scanner.Scan() {
 		message := scanner.Text()
 
@@ -134,6 +139,7 @@ func (s *Server) registerClient(clientId string, conn net.Conn) {
 	s.clients[clientId] = &Client{
 		conn:            conn,
 		lastInteraction: time.Now().String(),
+		isActive:        true,
 	}
 
 	log.Printf("Registered client: %s", clientId)
@@ -158,12 +164,8 @@ func (s *Server) checkIsConnectionsAlive() {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 	for deviceID, client := range s.clients {
-		interactionTime, err := handlers.ParseTime(client.lastInteraction)
-		if err != nil {
-			log.Printf("Error parsing last interaction time for client %s: %v", deviceID, err)
-			continue
-		}
-		if time.Since(interactionTime) > 5*time.Minute {
+		ok := client.isConnectionAlive()
+		if !ok {
 			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
 			err := client.conn.Close()
 			if err != nil {
@@ -182,6 +184,7 @@ func (s *Server) updateClientInteraction(clientID string) {
 
 	if client, exists := s.clients[clientID]; exists {
 		client.lastInteraction = time.Now().String()
+		client.isActive = true
 	}
 }
 
@@ -259,6 +262,35 @@ func (s *Server) handleRemoveSession(conn net.Conn, sessionId int) {
 		return
 	}
 	log.Printf("Session removed: %v", sessionId)
+}
+
+func (c *Client) setInactive() {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+	c.isActive = false
+}
+
+func (c *Client) isConnectionAlive() bool {
+	c.mutex.RLock()
+	defer c.mutex.RUnlock()
+	inter, err := handlers.ParseTime(c.lastInteraction)
+	if err != nil {
+		log.Printf("Error parsing last interaction time: %v", err)
+		return false
+	}
+	return c.isActive && time.Since(inter) < 5*time.Minute
+}
+
+func (s *Server) startConnectionChecker() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			s.checkIsConnectionsAlive()
+		}
+	}
 }
 
 // trash
