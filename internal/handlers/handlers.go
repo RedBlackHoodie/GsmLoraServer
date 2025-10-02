@@ -150,23 +150,43 @@ type SetSettingsMessage struct {
 }
 
 type GetDataMessage struct {
-	Data []models.Packet
+	SessionId int
+	Data      []models.Packet
 }
+
 type StartMeasurementMessage struct {
-	RequestId int
+	SessionId int
 }
 
 type StopMeasurementMessage struct {
 	RequestId int
 }
 
+type GetMeasurementSessionsMessage struct{}
+
+type AddSessionMessage struct {
+	Session models.Session
+}
+
+type RemoveSessionMessage struct {
+	SessionId int
+}
+
+type IncomingMeasurementMessage struct {
+	Data      models.Packet
+	sessionId int
+}
+
 type UnknownMessageMessage struct{}
 
-func (m SetSettingsMessage) Type() string      { return "SET_SETTINGS" }
-func (m GetDataMessage) Type() string          { return "GET_MEASUREMENT" }
-func (m StartMeasurementMessage) Type() string { return "START_MEASUREMENT" }
-func (m StopMeasurementMessage) Type() string  { return "STOP_MEASUREMENT" }
-func (m UnknownMessageMessage) Type() string   { return "UNKNOWN" }
+func (m SetSettingsMessage) Type() string            { return "SET_SETTINGS" }
+func (m GetDataMessage) Type() string                { return "GET_MEASUREMENT" }
+func (m StartMeasurementMessage) Type() string       { return "START_MEASUREMENT" }
+func (m StopMeasurementMessage) Type() string        { return "STOP_MEASUREMENT" }
+func (m GetMeasurementSessionsMessage) Type() string { return "GET_MEASUREMENT_SESSIONS" }
+func (m AddSessionMessage) Type() string             { return "ADD_SESSION" }
+func (m RemoveSessionMessage) Type() string          { return "REMOVE_SESSION" }
+func (m UnknownMessageMessage) Type() string         { return "UNKNOWN" }
 
 type GetMessage struct {
 	What string
@@ -182,31 +202,50 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		return SetSettingsMessage{Params: par}, nil
 
 	} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
-		requestId := 0
-		_, err := fmt.Sscanf(message, "SESSION_ID=%d", &requestId)
+		sessionId := 0
+		_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
 		if err != nil {
-			log.Printf("error parsing get request: %v", err)
+			log.Printf("error parsing get_measurement: %v", err)
 		}
-		data, err := h.GetMeasurements(int32(requestId))
+		data, err := h.GetMeasurements(int32(sessionId))
 		if err != nil {
 			return nil, err
 		}
 
-		return GetDataMessage{Data: data}, nil
+		return GetDataMessage{SessionId: sessionId, Data: data}, nil
 	} else if strings.HasPrefix(message, "START_MEASUREMENT") {
-		requestId := 0
-		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
+		sessionId, err := strconv.Atoi(strings.TrimSpace(cleaned))
 		if err != nil {
 			log.Printf("error parsing get request: %v", err)
 		}
-		return StartMeasurementMessage{RequestId: requestId}, nil
-	} else if strings.HasPrefix(message, "STOP_MEASUREMENTS") {
-		requestId := 0
-		_, err := fmt.Sscanf(message, "REQUEST_ID=%d", &requestId)
+		return StartMeasurementMessage{SessionId: sessionId}, nil
+		//} else if strings.HasPrefix(message, "STOP_MEASUREMENT") {
+		//	cleaned := strings.TrimPrefix(message, "STOP_MEASUREMENT: ")
+		//	requestId, err := strconv.Atoi(strings.TrimSpace(cleaned))
+		//
+		//	if err != nil {
+		//		log.Printf("error parsing get request: %v", err)
+		//	}
+		//	return StopMeasurementMessage{RequestId: requestId}, nil
+		//}
+	} else if strings.HasPrefix(message, "GET_MEASUREMENT_SESSIONS") {
+		return GetMeasurementSessionsMessage{}, nil
+	} else if strings.HasPrefix(message, "ADD_SESSION") {
+		sessionStr := strings.TrimPrefix(message, "ADD_SESSION: ")
+		session, err := ParseSession(sessionStr)
 		if err != nil {
-			log.Printf("error parsing get request: %v", err)
+			log.Printf("error parsing ADD_SESSION: %v", err)
+			return nil, err
 		}
-		return StopMeasurementMessage{RequestId: requestId}, nil
+		return AddSessionMessage{Session: session}, nil
+	} else if strings.HasPrefix(message, "REMOVE_SESSION") {
+		sessionId, err := ParseRemoveSessionMessage(message)
+		if err != nil {
+			log.Printf("error parsing REMOVE_SESSION: %v", err)
+			return nil, err
+		}
+		return RemoveSessionMessage{SessionId: sessionId}, nil
 	}
 
 	return UnknownMessageMessage{}, nil
@@ -262,4 +301,27 @@ func ParseRemoveSessionMessage(message string) (int, error) {
 	}
 
 	return sessionID, nil
+}
+
+func ParseTime(timeStr string) (time.Time, error) {
+	layout := "2006-01-02T15:04:05Z"
+	parsedTime, err := time.Parse(layout, timeStr)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid time format: %w", err)
+	}
+	return parsedTime, nil
+}
+
+func ParseIncomingMeasurement(message string) (IncomingMeasurementMessage, error) {
+	cleaned := strings.TrimPrefix(message, "MEASUREMENT: ")
+	packetParser := PacketParser{}
+	_, err := packetParser.ParsePacketData(cleaned)
+	if err != nil {
+		return IncomingMeasurementMessage{}, fmt.Errorf("error parsing incoming measurement: %w", err)
+	}
+	incoming := IncomingMeasurementMessage{
+		Data:      *packetParser.Data,
+		sessionId: 0,
+	}
+	return incoming, nil
 }
