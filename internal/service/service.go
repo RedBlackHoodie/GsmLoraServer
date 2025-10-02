@@ -179,14 +179,7 @@ func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) 
 	return data, nil
 }
 
-func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId int) error {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Println(fmt.Errorf("error connecting to device: %v", err))
-		return err
-	}
+func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sessionId int) error {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
@@ -194,7 +187,8 @@ func (s *DataService) SendMeasurementCommand(ip, port, command string, sessionId
 		}
 	}(conn)
 
-	log.Printf("Connected to device %v", ip)
+	log.Printf("Connected to device %v", conn.RemoteAddr().String())
+	var err error
 	if sessionId == 0 {
 
 		_, err = conn.Write([]byte(command))
@@ -254,35 +248,8 @@ func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
 }
 
 func (s *DataService) SendAllSessions(conn net.Conn, data string) error {
-	//target := ip + ":" + port
-	//var conn net.Conn
 	var err error
-	//for attempt := 0; attempt < 5; attempt++ {
-	//	conn, err = net.Dial("tcp", target)
-	//	if err == nil {
-	//		log.Printf("Successfully connected to %s on attempt %v", err, attempt+1)
-	//		break
-	//	}
-	//	log.Printf("Attempt %d failed: %v", attempt, err)
-	//	if attempt < 4 {
-	//		time.Sleep(time.Duration(attempt) * time.Second)
-	//	}
-	//}
-	//if err != nil {
-	//	log.Printf("failed to connect after 5 attempts: %v", err)
-	//}
-	if conn == nil {
-		log.Printf("connection is nil after successful dial")
-		return err
-	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
 
-	//log.Printf("Connected to device %v", ip)
 	resp := fmt.Sprintf("SESSIONS: %s\n", data)
 	log.Printf("Sent message: %s", resp)
 	_, err = conn.Write([]byte(resp))
