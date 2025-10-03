@@ -1,7 +1,7 @@
 package service
 
 import (
-	"Lora_Esp_Gsm_Gps_project/configs"
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
@@ -21,13 +21,15 @@ type DataService struct {
 	interfaceSettingsChange chan *models.Params
 	mu                      sync.RWMutex
 	isProcessing            bool
+	espConnector            *esp.ESPConnector
 }
 
-func NewDataService() *DataService {
+func NewDataService(connector *esp.ESPConnector) *DataService {
 	service := &DataService{
 		packetChan:              make(chan *models.Packet, 100),
 		Repo:                    nil,
 		interfaceSettingsChange: make(chan *models.Params, 10),
+		espConnector:            connector,
 	}
 
 	return service
@@ -149,9 +151,8 @@ func (s *DataService) processPackets() {
 }
 
 func (s *DataService) processInterfaceSettingsChange() {
-	config := configs.LoadEspConfig()
 	for params := range s.interfaceSettingsChange {
-		err := handlers.SendParamsToDevice(config.EspIP, config.EspPort, *params)
+		err := s.espConnector.SendParamsToDevice(*params)
 		if err != nil {
 			log.Printf("Error sending params to device: %v", err)
 		} else {

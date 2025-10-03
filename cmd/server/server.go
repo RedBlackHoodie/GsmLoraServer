@@ -2,6 +2,7 @@ package server
 
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/core"
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
@@ -26,12 +27,14 @@ type Server struct {
 	clients            map[string]*Client
 	mutex              sync.RWMutex
 	measurementHandler core.MeasurementHandler
+	connector          *esp.ESPConnector
 }
 
-func NewServer(h core.MeasurementHandler) *Server {
+func NewServer(h core.MeasurementHandler, connector *esp.ESPConnector) *Server {
 	return &Server{
 		clients:            make(map[string]*Client),
 		measurementHandler: h,
+		connector:          connector,
 	}
 }
 
@@ -208,7 +211,7 @@ func (s *Server) handleSetSettings(conn net.Conn, message string) {
 
 func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 	go func() {
-		err := s.measurementHandler.SendMeasurementCommand(conn, "START_MEASUREMENT", sessionId)
+		err := s.connector.SendCommand("START_MEASUREMENT", sessionId)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
 			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))

@@ -3,6 +3,7 @@ package app
 import (
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"Lora_Esp_Gsm_Gps_project/internal/service"
 	"database/sql"
@@ -10,9 +11,10 @@ import (
 )
 
 type App struct {
-	DB          *sql.DB
-	Server      *server.Server
-	DataService *service.DataService
+	DB           *sql.DB
+	Server       *server.Server
+	DataService  *service.DataService
+	EspConnector *esp.ESPConnector
 }
 
 func New() *App {
@@ -37,7 +39,7 @@ func (a *App) InitDB(cfg *configs.Config) error {
 		return fmt.Errorf("failed to init tables: %w", err)
 	}
 	if a.DataService == nil {
-		a.DataService = service.NewDataService()
+		a.DataService = service.NewDataService(a.EspConnector)
 	}
 
 	a.DB = db
@@ -57,8 +59,8 @@ func (a *App) InitServer(cfg *configs.Config) error {
 	return nil
 }
 
-func (a *App) InitService() {
-	a.DataService = service.NewDataService()
+func (a *App) InitService(connector *esp.ESPConnector) {
+	a.DataService = service.NewDataService(connector)
 }
 
 func (a *App) Close() error {

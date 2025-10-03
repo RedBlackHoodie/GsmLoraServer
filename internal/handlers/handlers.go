@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -112,34 +111,34 @@ func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	return packet, nil
 }
 
-func SendParamsToDevice(ip string, port string, config models.Params) error {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Println(fmt.Errorf("error connecting to device: %v", err))
-		return err
-	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
-
-	log.Printf("Connected to device %v", ip)
-
-	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
-
-	_, err = conn.Write([]byte(message))
-
-	if err != nil {
-		log.Println(fmt.Errorf("error sending message: %v", err))
-		return err
-	}
-	log.Printf("Sent params: %v", message)
-	return nil
-}
+//func SendParamsToDevice(ip string, port string, config models.Params) error {
+//	target := ip + ":" + port
+//	timeout := 10 * time.Second
+//	conn, err := net.DialTimeout("tcp", target, timeout)
+//	if err != nil {
+//		log.Println(fmt.Errorf("error connecting to device: %v", err))
+//		return err
+//	}
+//	defer func(conn net.Conn) {
+//		err := conn.Close()
+//		if err != nil {
+//			log.Printf("Error closing connection: %v", err)
+//		}
+//	}(conn)
+//
+//	log.Printf("Connected to device %v", ip)
+//
+//	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
+//
+//	_, err = conn.Write([]byte(message))
+//
+//	if err != nil {
+//		log.Println(fmt.Errorf("error sending message: %v", err))
+//		return err
+//	}
+//	log.Printf("Sent params: %v", message)
+//	return nil
+//}
 
 type Message interface {
 	Type() string
