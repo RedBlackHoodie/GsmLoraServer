@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 type DataService struct {
@@ -31,11 +30,21 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 		interfaceSettingsChange: make(chan *models.Params, 10),
 		espConnector:            connector,
 	}
-
 	return service
 }
 
 func (s *DataService) StartProcessing() {
+	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
+	if err != nil {
+		log.Printf("Error connecting to ESP: %v", err)
+	}
+	err = s.espConnector.ListeningStart(s.handleESPData)
+	if err != nil {
+		log.Printf("Error starting listening: %v", err)
+	}
+
+	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
+
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
 }
@@ -132,6 +141,13 @@ func (s *DataService) ProcessInterfaceSettingChange(message string) error {
 	return nil
 }
 
+func (s *DataService) handleESPData(data string) {
+	err := s.ProcessPacketData(data)
+	if err != nil {
+		log.Printf("Error processing packet data to chan: %v", err)
+	}
+}
+
 func (s *DataService) processPackets() {
 	s.mu.Lock()
 	s.isProcessing = true
@@ -171,7 +187,7 @@ func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) 
 		}
 	}
 
-	data, err := s.Repo.FindById(int32(requestID))
+	data, err := s.Repo.FindById(requestID)
 	if err != nil {
 		log.Printf("Error getting measurements for id: %v %d", err, requestID)
 		return nil, err
@@ -213,21 +229,7 @@ func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sess
 	}
 }
 
-func (s *DataService) SendMeasurementsToClient(ip, port, data string) error {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Println(fmt.Errorf("error connecting to device: %v", err))
-		return err
-	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
-	log.Printf("Connected to device %v", ip)
+func (s *DataService) SendMeasurementsToClient(conn net.Conn, data string) error {
 	packets, err := s.GetMeasurements(0)
 	if err != nil {
 		log.Printf("Error getting measurements: %v", err)

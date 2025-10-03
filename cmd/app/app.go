@@ -48,7 +48,7 @@ func (a *App) InitDB(cfg *configs.Config) error {
 }
 
 func (a *App) InitServer(cfg *configs.Config) error {
-	a.Server = server.NewServer(a.DataService)
+	a.Server = server.NewServer(a.DataService, a.EspConnector)
 	go func() {
 		err := a.Server.StartServer(cfg.Port)
 		if err != nil {

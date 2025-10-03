@@ -2,6 +2,7 @@ package esp
 
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
+	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -17,6 +18,29 @@ type ESPConnector struct {
 	conn        net.Conn
 	isConnected bool
 	mutex       sync.RWMutex
+}
+
+type Message interface {
+	Type() string
+}
+
+type MeasurementMessage struct {
+	Data      models.Packet
+	sessionId int
+}
+
+type NoSignalErrorMessage struct {
+	Error string
+}
+
+type UnknownMessage struct{}
+
+func (m MeasurementMessage) Type() string   { return "MEASUREMENT" }
+func (m NoSignalErrorMessage) Type() string { return "NO_SIGNAL" }
+func (m UnknownMessage) Type() string       { return "UNKNOWN" }
+
+type GetMessage struct {
+	What string
 }
 
 func NewESPConnector() *ESPConnector {
@@ -143,7 +167,7 @@ func (e *ESPConnector) Close() error {
 	return nil
 }
 
-func (e *ESPConnector) MaintainConnection(ip, port string) {
+func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(string)) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -153,7 +177,32 @@ func (e *ESPConnector) MaintainConnection(ip, port string) {
 			err := e.Connect(ip, port)
 			if err != nil {
 				log.Printf("Failed to reconnect to ESP32: %v", err)
+			} else {
+				err = e.ListeningStart(dataHandler)
+				if err != nil {
+					return
+				}
 			}
 		}
+	}
+}
+
+func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
+	reader := bufio.NewReader(e.conn)
+
+	for {
+		message, err := reader.ReadString('\n')
+		if err != nil {
+			e.mutex.Lock()
+			e.isConnected = false
+			e.conn = nil
+			e.mutex.Unlock()
+			log.Printf("error reading from ESP32: %v", err)
+		}
+		if message == "" {
+			continue
+		}
+		log.Printf("Received message from ESP32: %s", message)
+		dataHandler(message)
 	}
 }
