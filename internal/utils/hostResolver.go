@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
 )
 
 func ResolveEspHost(hostname, mac string) (string, error) {
@@ -88,20 +87,9 @@ func getNetworkInterface() (*net.Interface, *net.IPNet, error) {
 func activeNetworkScan(iface *net.Interface, ipNet *net.IPNet, targetMAC string) (string, error) {
 	//targetMAC = normalizeMAC(targetMAC)
 
-	ips, err := getIPsFromNetwork(ipNet)
+	_, err := getIPsFromNetwork(ipNet)
 	if err != nil {
 		return "", err
-	}
-	go func() {
-		for i := 0; i < 10 && i < len(ips); i++ {
-			cmd := exec.Command("ping", "-c", "1", "-W", "1", ips[i])
-			cmd.Run()
-		}
-	}()
-	time.Sleep(2 * time.Second)
-
-	if ip, err := scanARPTable(targetMAC); err == nil {
-		return ip, nil
 	}
 
 	cmd := exec.Command("arp-scan", "--interface", iface.Name, "--localnet")
