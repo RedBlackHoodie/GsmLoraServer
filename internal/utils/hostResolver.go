@@ -11,6 +11,10 @@ import (
 )
 
 func ResolveEspHost(hostname, mac string) (string, error) {
+	if ip, err := scanARPTable(mac); err == nil {
+		return ip, nil
+	}
+
 	if ip, err := resolveMDNS(hostname); err == nil {
 		return ip, nil
 	}
@@ -18,10 +22,6 @@ func ResolveEspHost(hostname, mac string) (string, error) {
 	iface, ipNet, err := getNetworkInterface()
 	if err != nil {
 		return "", fmt.Errorf("failed to get network interface: %v", err)
-	}
-
-	if ip, err := scanARPTable(mac); err == nil {
-		return ip, nil
 	}
 
 	return activeNetworkScan(iface, ipNet, mac)

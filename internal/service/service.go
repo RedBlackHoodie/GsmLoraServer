@@ -35,7 +35,7 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 	return service
 }
 
-func (s *DataService) StartProcessing() {
+func (s *DataService) EspInitializer() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
 	if s.espConnector.Conn == nil {
 		log.Printf("Connection to ESP32 failed with, retrying: %s\n", err)
@@ -43,6 +43,7 @@ func (s *DataService) StartProcessing() {
 		if ok {
 			s.SendToClient(clientConn, "ESP_NOT_CONNECTED")
 		}
+		return
 	}
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
@@ -61,6 +62,12 @@ func (s *DataService) StartProcessing() {
 
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
+}
+
+func (s *DataService) StartProcessing() {
+	go s.processPackets()
+	go s.processInterfaceSettingsChange()
+
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {

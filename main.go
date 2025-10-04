@@ -70,6 +70,7 @@ func main() {
 		}
 	}(appInstance)
 
+	appInstance.DataService.EspInitializer()
 	appInstance.DataService.StartProcessing()
 	srv := server.NewServer(appInstance.DataService, espConnector)
 
