@@ -258,7 +258,7 @@ func (s *Server) handleAddSession(conn net.Conn, session models.Session) {
 }
 
 func (s *Server) handleRemoveSession(conn net.Conn, sessionId int) {
-	err := s.measurementHandler.RemoveSession(int32(sessionId))
+	err := s.measurementHandler.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)
 		conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))

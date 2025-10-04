@@ -133,7 +133,7 @@ func (r *Repo) SaveSession(session models.Session) error {
 	return err
 }
 
-func (r *Repo) RemoveSession(sessionId int32) error {
+func (r *Repo) RemoveSession(sessionId int) error {
 	_, err := r.db.Exec("DELETE FROM sessions WHERE id = $1", sessionId)
 	if err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)

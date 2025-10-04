@@ -31,5 +31,5 @@ type MeasurementHandler interface {
 	GetAllSessions() ([]models.Session, error)
 	SendAllSessions(conn net.Conn, data string) error
 	SaveSession(session models.Session) error
-	RemoveSession(sessionId int32) error
+	RemoveSession(sessionId int) error
 }

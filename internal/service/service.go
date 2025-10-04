@@ -297,7 +297,7 @@ func (s *DataService) SaveSession(session models.Session) error {
 	return nil
 }
 
-func (s *DataService) RemoveSession(sessionId int32) error {
+func (s *DataService) RemoveSession(sessionId int) error {
 	err := s.Repo.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)
