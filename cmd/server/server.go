@@ -74,7 +74,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	scanner := bufio.NewScanner(conn)
 	count := 0
 
-	go s.startConnectionChecker()
+	//go s.startConnectionChecker()
 
 	for scanner.Scan() {
 		message := scanner.Text()
@@ -127,7 +127,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		count++
 		log.Printf("Received message: %v", message)
 	}
-	s.checkIsConnectionsAlive()
+	//s.checkIsConnectionsAlive()
 	if err := scanner.Err(); err != nil {
 		log.Println("Error reading:", err.Error())
 		return err
@@ -163,23 +163,23 @@ func (s *Server) unregisterClient(deviceID string) {
 	}
 }
 
-func (s *Server) checkIsConnectionsAlive() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for deviceID, client := range s.clients {
-		ok := client.isConnectionAlive()
-		if !ok {
-			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
-			err := client.conn.Close()
-			if err != nil {
-				log.Printf("Error closing connection for client %s: %v", deviceID, err)
-				continue
-			}
-			delete(s.clients, deviceID)
-			log.Printf("Unregistered inactive client: %s", deviceID)
-		}
-	}
-}
+//func (s *Server) checkIsConnectionsAlive() {
+//	s.mutex.Lock()
+//	defer s.mutex.Unlock()
+//	for deviceID, client := range s.clients {
+//		ok := client.isConnectionAlive()
+//		if !ok {
+//			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
+//			err := client.conn.Close()
+//			if err != nil {
+//				log.Printf("Error closing connection for client %s: %v", deviceID, err)
+//				continue
+//			}
+//			delete(s.clients, deviceID)
+//			log.Printf("Unregistered inactive client: %s", deviceID)
+//		}
+//	}
+//}
 
 func (s *Server) updateClientInteraction(clientID string) {
 	s.mutex.Lock()
@@ -284,17 +284,17 @@ func (c *Client) isConnectionAlive() bool {
 	return c.isActive && time.Since(inter) < 5*time.Minute
 }
 
-func (s *Server) startConnectionChecker() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.checkIsConnectionsAlive()
-		}
-	}
-}
+//func (s *Server) startConnectionChecker() {
+//	ticker := time.NewTicker(1 * time.Minute)
+//	defer ticker.Stop()
+//
+//	for {
+//		select {
+//		case <-ticker.C:
+//			s.checkIsConnectionsAlive()
+//		}
+//	}
+//}
 
 // trash
 //if strings.HasPrefix(body, "SET_SETTINGS") {

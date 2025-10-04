@@ -200,18 +200,18 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		return SetSettingsMessage{Params: par}, nil
 
-	} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
-		sessionId := 0
-		_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
-		if err != nil {
-			log.Printf("error parsing get_measurement: %v", err)
-		}
-		data, err := h.GetMeasurements(int32(sessionId))
-		if err != nil {
-			return nil, err
-		}
-
-		return GetDataMessage{SessionId: sessionId, Data: data}, nil
+		//} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
+		//	sessionId := 0
+		//	_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
+		//	if err != nil {
+		//		log.Printf("error parsing get_measurement: %v", err)
+		//	}
+		//	data, err := h.GetMeasurements(int32(sessionId))
+		//	if err != nil {
+		//		return nil, err
+		//	}
+		//
+		//	return GetDataMessage{SessionId: sessionId, Data: data}, nil
 	} else if strings.HasPrefix(message, "START_MEASUREMENT") {
 		cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
 		sessionId, err := strconv.Atoi(strings.TrimSpace(cleaned))
