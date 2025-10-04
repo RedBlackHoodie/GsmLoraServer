@@ -23,7 +23,7 @@ func ResolveEspHost(hostname, mac string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get network interface: %v", err)
 	}
-
+	printNetworkInfo(iface, ipNet)
 	return activeNetworkScan(iface, ipNet, mac)
 }
 
@@ -182,4 +182,26 @@ func normalizeMAC(mac string) string {
 	re := regexp.MustCompile(`[^a-fA-F0-9]`)
 	normalized := re.ReplaceAllString(mac, "")
 	return strings.ToLower(normalized)
+}
+
+func printNetworkInfo(iface *net.Interface, ipNet *net.IPNet) {
+	fmt.Println("\n Network Information:")
+	fmt.Printf("   Interface: %s\n", iface.Name)
+	fmt.Printf("   Network: %s\n", ipNet.String())
+	fmt.Printf("   MTU: %d\n", iface.MTU)
+
+	if iface.HardwareAddr != nil {
+		fmt.Printf("   MAC: %s\n", iface.HardwareAddr.String())
+	}
+
+	addrs, err := iface.Addrs()
+	if err == nil {
+		fmt.Println("   IP Addresses:")
+		for i, addr := range addrs {
+			fmt.Printf("     %d. %s\n", i+1, addr.String())
+		}
+	}
+
+	flags := iface.Flags.String()
+	fmt.Printf("   Flags: %s\n", flags)
 }
