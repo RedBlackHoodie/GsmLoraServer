@@ -41,10 +41,12 @@ func (s *DataService) EspInitializer() {
 		log.Printf("Error connecting to ESP: %v", err)
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
-	err = s.espConnector.ListeningStart(s.handleESPData)
-	if err != nil {
-		log.Printf("Error starting listening: %v", err)
-	}
+	go func() {
+		err = s.espConnector.ListeningStart(s.handleESPData)
+		if err != nil {
+			log.Printf("Error starting listening: %v", err)
+		}
+	}()
 	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
 }
 
