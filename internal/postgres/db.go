@@ -97,8 +97,12 @@ func (r *Repo) CreateSessionsTable() error {
 }
 
 func (r *Repo) Save(packet *models.Packet) error {
-	_, err := r.db.Exec("INSERT INTO PACKETS "+
-		"INSERT (request_id, rssi, snrl, latitude, longitude, hdop, timestamp) values ($1, $2, $3, $4, $5, $6, $7)",
+	id, err := r.FindLastSessionId()
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec("INSERT INTO PACKETS "+
+		"INSERT (request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id), values ($1, $2, $3, $4, $5, $6, $7, $8)",
 		packet.RequestId,
 		packet.RSSI,
 		packet.SNRL,
@@ -106,6 +110,7 @@ func (r *Repo) Save(packet *models.Packet) error {
 		packet.Coordinate.Longitude,
 		packet.Hdop,
 		packet.Timestamp,
+		id,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save packet: %w", err)
@@ -222,4 +227,14 @@ func (r *Repo) FindLastRequestId() (int32, error) {
 		return 0, fmt.Errorf("failed to get last request ID: %w", err)
 	}
 	return lastRequestId, nil
+}
+
+func (r *Repo) FindLastSessionId() (int32, error) {
+	var lastSessionId int32
+	err := r.db.QueryRow("SELECT COALESCE(MAX(id), 0)" +
+		" FROM sessions").Scan(&lastSessionId)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last request ID: %w", err)
+	}
+	return lastSessionId, nil
 }

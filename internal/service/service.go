@@ -197,12 +197,6 @@ func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) 
 }
 
 func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sessionId int) error {
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
 
 	log.Printf("Connected to device %v", conn.RemoteAddr().String())
 	var err error
