@@ -216,6 +216,7 @@ func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
 			e.Conn = nil
 			e.mutex.Unlock()
 			log.Printf("error reading from ESP32: %v", err)
+			return err
 		}
 		if message == "" {
 			continue

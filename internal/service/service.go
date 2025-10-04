@@ -154,6 +154,13 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 }
 
 func (s *DataService) handleESPData(data string) {
+	if data == "" {
+		return
+	}
+	if strings.HasPrefix(data, "ACK") {
+		return
+	}
+
 	err := s.ProcessPacketData(data)
 	if err != nil {
 		log.Printf("Error processing packet data to chan: %v", err)
