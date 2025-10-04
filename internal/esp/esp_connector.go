@@ -91,7 +91,7 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 	defer e.mutex.RUnlock()
 
 	if !e.isConnected || e.Conn == nil {
-		return fmt.Errorf("not Connected to ESP32")
+		log.Printf("not Connected to ESP32")
 	}
 
 	var message string
@@ -116,7 +116,8 @@ func (e *ESPConnector) SendParamsToDevice(params models.Params) error {
 	defer e.mutex.RUnlock()
 
 	if !e.isConnected || e.Conn == nil {
-		return fmt.Errorf("not Connected to ESP32")
+		log.Printf("not Connected to ESP32")
+
 	}
 
 	message := fmt.Sprintf("SET_SETTINGS: SF=%.1f, TX=%.1f, BW=%.1f", params.Sf, params.Tx, params.Bandwidth)

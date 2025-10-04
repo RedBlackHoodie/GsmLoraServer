@@ -37,27 +37,14 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 
 func (s *DataService) EspInitializer() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
-	if s.espConnector.Conn == nil {
-		log.Printf("Connection to ESP32 failed with, retrying: %s\n", err)
-		clientConn, ok := s.FindClientConnection()
-		if ok {
-			s.SendToClient(clientConn, "ESP_NOT_CONNECTED")
-		}
-		return
-	}
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
-	}
-	clientConn, ok := s.FindClientConnection()
-	if ok {
-		s.SendToClient(clientConn, "ESP_NOT_CONNECTED")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	err = s.espConnector.ListeningStart(s.handleESPData)
 	if err != nil {
 		log.Printf("Error starting listening: %v", err)
 	}
-	s.SendToClient(clientConn, "ESP_CONNECTED")
 	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
 
 	go s.processPackets()
@@ -130,6 +117,11 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
 	parts := strings.Split(cleanedMessage, ", ")
 	s.clients[conn] = models.Client
+	if s.espConnector.Conn == nil {
+		conn.Write([]byte("ESP_NOT_CONNECTED"))
+	} else {
+		conn.Write([]byte("ESP_CONNECTED"))
+	}
 	params := models.Params{}
 
 	for _, part := range parts {
@@ -218,7 +210,6 @@ func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) 
 }
 
 func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sessionId int) error {
-
 	log.Printf("Connected to device %v", conn.RemoteAddr().String())
 	var err error
 	if sessionId == 0 {
