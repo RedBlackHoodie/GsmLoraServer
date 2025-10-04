@@ -303,7 +303,7 @@ func ParseRemoveSessionMessage(message string) (int, error) {
 }
 
 func ParseTime(timeStr string) (time.Time, error) {
-	layout := "2006-01-02T15:04:05Z"
+	layout := "2006-01-02T15:04:05 +0000 UTC m=+1101.042160876"
 	parsedTime, err := time.Parse(layout, timeStr)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid time format: %w", err)
