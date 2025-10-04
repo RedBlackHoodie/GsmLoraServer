@@ -201,7 +201,7 @@ func (s *Server) deleteAllClients() {
 
 func (s *Server) handleSetSettings(conn net.Conn, message string) {
 	go func() {
-		err := s.measurementHandler.ProcessInterfaceSettingChange(message)
+		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
 			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))

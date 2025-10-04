@@ -21,6 +21,7 @@ type DataService struct {
 	mu                      sync.RWMutex
 	isProcessing            bool
 	espConnector            *esp.ESPConnector
+	clients                 map[net.Conn]models.Destination
 }
 
 func NewDataService(connector *esp.ESPConnector) *DataService {
@@ -29,20 +30,33 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 		Repo:                    nil,
 		interfaceSettingsChange: make(chan *models.Params, 10),
 		espConnector:            connector,
+		clients:                 make(map[net.Conn]models.Destination, 10),
 	}
 	return service
 }
 
 func (s *DataService) StartProcessing() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
+	if s.espConnector.Conn == nil {
+		log.Printf("Connection to ESP32 failed with, retrying: %s\n", err)
+		clientConn, ok := s.FindClientConnection()
+		if ok {
+			s.SendToClient(clientConn, "ESP_NOT_CONNECTED")
+		}
+	}
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
 	}
+	clientConn, ok := s.FindClientConnection()
+	if ok {
+		s.SendToClient(clientConn, "ESP_NOT_CONNECTED")
+	}
+	s.clients[s.espConnector.Conn] = models.Lora
 	err = s.espConnector.ListeningStart(s.handleESPData)
 	if err != nil {
 		log.Printf("Error starting listening: %v", err)
 	}
-
+	s.SendToClient(clientConn, "ESP_CONNECTED")
 	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
 
 	go s.processPackets()
@@ -105,10 +119,10 @@ func (s *DataService) DrainDataChannel() error {
 	return nil
 }
 
-func (s *DataService) ProcessInterfaceSettingChange(message string) error {
+func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
 	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
 	parts := strings.Split(cleanedMessage, ", ")
-
+	s.clients[conn] = models.Client
 	params := models.Params{}
 
 	for _, part := range parts {
@@ -282,4 +296,38 @@ func (s *DataService) RemoveSession(sessionId int32) error {
 		log.Printf("Error removing session: %v", err)
 	}
 	return nil
+}
+
+func (s *DataService) AddClient(conn net.Conn, destination models.Destination) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.clients[conn] = destination
+	log.Printf("Client added: %s (type: %s). Total clients: %d",
+		conn.RemoteAddr().String(), destination.String(), len(s.clients))
+}
+
+func (s *DataService) SendToClient(conn net.Conn, message string) {
+	_, exists := s.clients[conn]
+	if !exists {
+		log.Printf("Client not found on connection: %v", conn)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := conn.Write([]byte(message + "\n"))
+	if err != nil {
+		log.Printf("Error sending message to client: %v", err)
+		return
+	}
+	log.Printf("Message %s sent to client %s", message, conn.RemoteAddr().String())
+}
+
+func (s *DataService) FindClientConnection() (net.Conn, bool) {
+	var clientConn net.Conn
+	for conn, dest := range s.clients {
+		if dest == models.Client {
+			clientConn = conn
+		}
+	}
+	return clientConn, clientConn != nil
 }

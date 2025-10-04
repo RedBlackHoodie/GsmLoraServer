@@ -15,7 +15,7 @@ import (
 type ESPConnector struct {
 	IP          string
 	Port        string
-	conn        net.Conn
+	Conn        net.Conn
 	isConnected bool
 	mutex       sync.RWMutex
 }
@@ -54,27 +54,44 @@ func (e *ESPConnector) Connect(ip, port string) error {
 	defer e.mutex.Unlock()
 
 	address := fmt.Sprintf("%s:%s", ip, port)
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		e.isConnected = false
-		return fmt.Errorf("failed to connect to ESP32 at %s: %v", address, err)
+
+	maxAttempts := 3
+	retryDelay := 5 * time.Second
+	var err error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		log.Printf("Attempting to connect to ESP32 at %s (attempt %d/%d)", address, attempt, maxAttempts)
+
+		Conn, dialErr := net.Dial("tcp", address)
+		if dialErr == nil {
+			e.IP = ip
+			e.Port = port
+			e.Conn = Conn
+			e.isConnected = true
+
+			log.Printf("Successfully connected to ESP32 at %s on attempt %d", address, attempt)
+			return nil
+		}
+
+		err = dialErr
+
+		if attempt < maxAttempts {
+			log.Printf("Connection attempt %d failed: %v. Retrying in %v...", attempt, dialErr, retryDelay)
+			time.Sleep(retryDelay)
+			retryDelay = time.Duration(float64(retryDelay) * 1.5)
+		}
 	}
 
-	e.IP = ip
-	e.Port = port
-	e.conn = conn
-	e.isConnected = true
-
-	log.Printf("Successfully connected to ESP32 at %s", address)
-	return nil
+	e.isConnected = false
+	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", address, maxAttempts, err)
 }
 
 func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
 
-	if !e.isConnected || e.conn == nil {
-		return fmt.Errorf("not connected to ESP32")
+	if !e.isConnected || e.Conn == nil {
+		return fmt.Errorf("not Connected to ESP32")
 	}
 
 	var message string
@@ -84,7 +101,7 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 		message = fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
 	}
 
-	_, err := e.conn.Write([]byte(message + "\n"))
+	_, err := e.Conn.Write([]byte(message + "\n"))
 	if err != nil {
 		e.isConnected = false
 		return fmt.Errorf("failed to send command to ESP32: %v", err)
@@ -98,13 +115,13 @@ func (e *ESPConnector) SendParamsToDevice(params models.Params) error {
 	e.mutex.RLock()
 	defer e.mutex.RUnlock()
 
-	if !e.isConnected || e.conn == nil {
-		return fmt.Errorf("not connected to ESP32")
+	if !e.isConnected || e.Conn == nil {
+		return fmt.Errorf("not Connected to ESP32")
 	}
 
 	message := fmt.Sprintf("SET_SETTINGS: SF=%.1f, TX=%.1f, BW=%.1f", params.Sf, params.Tx, params.Bandwidth)
 
-	_, err := e.conn.Write([]byte(message + "\n"))
+	_, err := e.Conn.Write([]byte(message + "\n"))
 	if err != nil {
 		e.isConnected = false
 		return fmt.Errorf("failed to send params to ESP32: %v", err)
@@ -158,9 +175,9 @@ func (e *ESPConnector) Close() error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	if e.conn != nil {
-		err := e.conn.Close()
-		e.conn = nil
+	if e.Conn != nil {
+		err := e.Conn.Close()
+		e.Conn = nil
 		e.isConnected = false
 		return err
 	}
@@ -173,10 +190,10 @@ func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(stri
 
 	for range ticker.C {
 		if !e.IsConnected() {
-			log.Printf("Attempting to reconnect to ESP32...")
+			log.Printf("Attempting to reConnect to ESP32...")
 			err := e.Connect(ip, port)
 			if err != nil {
-				log.Printf("Failed to reconnect to ESP32: %v", err)
+				log.Printf("Failed to reConnect to ESP32: %v", err)
 			} else {
 				err = e.ListeningStart(dataHandler)
 				if err != nil {
@@ -188,14 +205,14 @@ func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(stri
 }
 
 func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
-	reader := bufio.NewReader(e.conn)
+	reader := bufio.NewReader(e.Conn)
 
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {
 			e.mutex.Lock()
 			e.isConnected = false
-			e.conn = nil
+			e.Conn = nil
 			e.mutex.Unlock()
 			log.Printf("error reading from ESP32: %v", err)
 		}
