@@ -11,6 +11,11 @@ import (
 )
 
 func ResolveEspHost(hostname, mac string) (string, error) {
+	mac = strings.ToLower(mac)
+	if ip, err := scanARPTable(mac); err == nil {
+		return ip, nil
+	}
+
 	if ip, err := resolveMDNS(hostname); err == nil {
 		return ip, nil
 	}
@@ -19,10 +24,8 @@ func ResolveEspHost(hostname, mac string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to get network interface: %v", err)
 	}
-
-	if ip, err := scanARPTable(mac); err == nil {
-		return ip, nil
-	}
+	printNetworkInfo(iface, ipNet)
+	fmt.Printf("Ищем устройство с MAC: %s\n", mac)
 
 	return activeNetworkScan(iface, ipNet, mac)
 }
@@ -82,7 +85,7 @@ func getNetworkInterface() (*net.Interface, *net.IPNet, error) {
 }
 
 func activeNetworkScan(iface *net.Interface, ipNet *net.IPNet, targetMAC string) (string, error) {
-	targetMAC = normalizeMAC(targetMAC)
+	//targetMAC = normalizeMAC(targetMAC)
 
 	_, err := getIPsFromNetwork(ipNet)
 	if err != nil {
@@ -138,7 +141,10 @@ func parseArpScanOutput(output, targetMAC string) (string, error) {
 
 		if net.ParseIP(parts[0]) != nil {
 			mac := parts[1]
-			if normalizeMAC(mac) == targetMAC {
+			//if normalizeMAC(mac) == targetMAC {
+			//	return parts[0], nil
+			//}
+			if mac == targetMAC {
 				return parts[0], nil
 			}
 		}
@@ -149,7 +155,7 @@ func parseArpScanOutput(output, targetMAC string) (string, error) {
 
 func scanARPTable(targetMAC string) (string, error) {
 
-	targetMAC = normalizeMAC(targetMAC)
+	//targetMAC = normalizeMAC(targetMAC)
 
 	file, err := os.Open("/proc/net/arp")
 	if err != nil {
@@ -170,7 +176,10 @@ func scanARPTable(targetMAC string) (string, error) {
 		ip := fields[0]
 		mac := fields[3]
 
-		if normalizeMAC(mac) == targetMAC {
+		//if normalizeMAC(mac) == targetMAC {
+		//	return ip, nil
+		//}
+		if mac == targetMAC {
 			return ip, nil
 		}
 	}
@@ -182,4 +191,26 @@ func normalizeMAC(mac string) string {
 	re := regexp.MustCompile(`[^a-fA-F0-9]`)
 	normalized := re.ReplaceAllString(mac, "")
 	return strings.ToLower(normalized)
+}
+
+func printNetworkInfo(iface *net.Interface, ipNet *net.IPNet) {
+	fmt.Println("\n Network Information:")
+	fmt.Printf("   Interface: %s\n", iface.Name)
+	fmt.Printf("   Network: %s\n", ipNet.String())
+	fmt.Printf("   MTU: %d\n", iface.MTU)
+
+	if iface.HardwareAddr != nil {
+		fmt.Printf("   MAC: %s\n", iface.HardwareAddr.String())
+	}
+
+	addrs, err := iface.Addrs()
+	if err == nil {
+		fmt.Println("   IP Addresses:")
+		for i, addr := range addrs {
+			fmt.Printf("     %d. %s\n", i+1, addr.String())
+		}
+	}
+
+	flags := iface.Flags.String()
+	fmt.Printf("   Flags: %s\n", flags)
 }

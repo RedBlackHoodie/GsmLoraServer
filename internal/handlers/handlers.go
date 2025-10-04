@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -112,34 +111,34 @@ func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	return packet, nil
 }
 
-func SendParamsToDevice(ip string, port string, config models.Params) error {
-	target := ip + ":" + port
-	timeout := 10 * time.Second
-	conn, err := net.DialTimeout("tcp", target, timeout)
-	if err != nil {
-		log.Println(fmt.Errorf("error connecting to device: %v", err))
-		return err
-	}
-	defer func(conn net.Conn) {
-		err := conn.Close()
-		if err != nil {
-			log.Printf("Error closing connection: %v", err)
-		}
-	}(conn)
-
-	log.Printf("Connected to device %v", ip)
-
-	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
-
-	_, err = conn.Write([]byte(message))
-
-	if err != nil {
-		log.Println(fmt.Errorf("error sending message: %v", err))
-		return err
-	}
-	log.Printf("Sent params: %v", message)
-	return nil
-}
+//func SendParamsToDevice(ip string, port string, config models.Params) error {
+//	target := ip + ":" + port
+//	timeout := 10 * time.Second
+//	conn, err := net.DialTimeout("tcp", target, timeout)
+//	if err != nil {
+//		log.Println(fmt.Errorf("error connecting to device: %v", err))
+//		return err
+//	}
+//	defer func(conn net.Conn) {
+//		err := conn.Close()
+//		if err != nil {
+//			log.Printf("Error closing connection: %v", err)
+//		}
+//	}(conn)
+//
+//	log.Printf("Connected to device %v", ip)
+//
+//	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
+//
+//	_, err = conn.Write([]byte(message))
+//
+//	if err != nil {
+//		log.Println(fmt.Errorf("error sending message: %v", err))
+//		return err
+//	}
+//	log.Printf("Sent params: %v", message)
+//	return nil
+//}
 
 type Message interface {
 	Type() string
@@ -201,18 +200,18 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		return SetSettingsMessage{Params: par}, nil
 
-	} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
-		sessionId := 0
-		_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
-		if err != nil {
-			log.Printf("error parsing get_measurement: %v", err)
-		}
-		data, err := h.GetMeasurements(int32(sessionId))
-		if err != nil {
-			return nil, err
-		}
-
-		return GetDataMessage{SessionId: sessionId, Data: data}, nil
+		//} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
+		//	sessionId := 0
+		//	_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
+		//	if err != nil {
+		//		log.Printf("error parsing get_measurement: %v", err)
+		//	}
+		//	data, err := h.GetMeasurements(int32(sessionId))
+		//	if err != nil {
+		//		return nil, err
+		//	}
+		//
+		//	return GetDataMessage{SessionId: sessionId, Data: data}, nil
 	} else if strings.HasPrefix(message, "START_MEASUREMENT") {
 		cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
 		sessionId, err := strconv.Atoi(strings.TrimSpace(cleaned))
@@ -304,7 +303,7 @@ func ParseRemoveSessionMessage(message string) (int, error) {
 }
 
 func ParseTime(timeStr string) (time.Time, error) {
-	layout := "2006-01-02T15:04:05Z"
+	layout := "2006-01-02T15:04:05 +0000 UTC m=+1101.042160876"
 	parsedTime, err := time.Parse(layout, timeStr)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid time format: %w", err)

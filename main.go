@@ -4,6 +4,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/cmd/app"
 	"Lora_Esp_Gsm_Gps_project/cmd/server"
 	"Lora_Esp_Gsm_Gps_project/configs"
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/utils"
 	"io"
 	"log"
@@ -43,13 +44,19 @@ func main() {
 	}
 	err = utils.UpdateEnvFile("esp.env", "ESP_IP", ip)
 	if err != nil {
-		log.Println("Error updating .env file:", err)
+		log.Println("Error updating esp.env file:", err)
 		return
 	}
+	log.Printf("ESP32 IP: %s\n", ip)
+	espConnector := esp.NewESPConnector()
+	espConnector.IP = ip
+	espConnector.Port = espCfg.EspPort
+
 	appInstance := app.New()
 
 	dbCfg := configs.LoadConfig()
-	appInstance.InitService()
+	appInstance.EspConnector = espConnector
+	appInstance.InitService(espConnector)
 
 	err = appInstance.InitDB(dbCfg)
 	if err != nil {
@@ -63,8 +70,9 @@ func main() {
 		}
 	}(appInstance)
 
+	appInstance.DataService.EspInitializer()
 	appInstance.DataService.StartProcessing()
-	srv := server.NewServer(appInstance.DataService)
+	srv := server.NewServer(appInstance.DataService, espConnector)
 
 	go func() {
 		if err := srv.StartServer(dbCfg.Port); err != nil {

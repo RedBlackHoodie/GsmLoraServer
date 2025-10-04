@@ -2,6 +2,7 @@ package server
 
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/core"
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
@@ -26,12 +27,14 @@ type Server struct {
 	clients            map[string]*Client
 	mutex              sync.RWMutex
 	measurementHandler core.MeasurementHandler
+	connector          *esp.ESPConnector
 }
 
-func NewServer(h core.MeasurementHandler) *Server {
+func NewServer(h core.MeasurementHandler, connector *esp.ESPConnector) *Server {
 	return &Server{
 		clients:            make(map[string]*Client),
 		measurementHandler: h,
+		connector:          connector,
 	}
 }
 
@@ -71,7 +74,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 	scanner := bufio.NewScanner(conn)
 	count := 0
 
-	go s.startConnectionChecker()
+	//go s.startConnectionChecker()
 
 	for scanner.Scan() {
 		message := scanner.Text()
@@ -124,7 +127,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		count++
 		log.Printf("Received message: %v", message)
 	}
-	s.checkIsConnectionsAlive()
+	//s.checkIsConnectionsAlive()
 	if err := scanner.Err(); err != nil {
 		log.Println("Error reading:", err.Error())
 		return err
@@ -160,23 +163,23 @@ func (s *Server) unregisterClient(deviceID string) {
 	}
 }
 
-func (s *Server) checkIsConnectionsAlive() {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-	for deviceID, client := range s.clients {
-		ok := client.isConnectionAlive()
-		if !ok {
-			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
-			err := client.conn.Close()
-			if err != nil {
-				log.Printf("Error closing connection for client %s: %v", deviceID, err)
-				continue
-			}
-			delete(s.clients, deviceID)
-			log.Printf("Unregistered inactive client: %s", deviceID)
-		}
-	}
-}
+//func (s *Server) checkIsConnectionsAlive() {
+//	s.mutex.Lock()
+//	defer s.mutex.Unlock()
+//	for deviceID, client := range s.clients {
+//		ok := client.isConnectionAlive()
+//		if !ok {
+//			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
+//			err := client.conn.Close()
+//			if err != nil {
+//				log.Printf("Error closing connection for client %s: %v", deviceID, err)
+//				continue
+//			}
+//			delete(s.clients, deviceID)
+//			log.Printf("Unregistered inactive client: %s", deviceID)
+//		}
+//	}
+//}
 
 func (s *Server) updateClientInteraction(clientID string) {
 	s.mutex.Lock()
@@ -198,7 +201,7 @@ func (s *Server) deleteAllClients() {
 
 func (s *Server) handleSetSettings(conn net.Conn, message string) {
 	go func() {
-		err := s.measurementHandler.ProcessInterfaceSettingChange(message)
+		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
 			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
@@ -208,7 +211,7 @@ func (s *Server) handleSetSettings(conn net.Conn, message string) {
 
 func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 	go func() {
-		err := s.measurementHandler.SendMeasurementCommand(conn, "START_MEASUREMENT", sessionId)
+		err := s.connector.SendCommand("START_MEASUREMENT", sessionId)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
 			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
@@ -255,7 +258,7 @@ func (s *Server) handleAddSession(conn net.Conn, session models.Session) {
 }
 
 func (s *Server) handleRemoveSession(conn net.Conn, sessionId int) {
-	err := s.measurementHandler.RemoveSession(int32(sessionId))
+	err := s.measurementHandler.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)
 		conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
@@ -281,17 +284,17 @@ func (c *Client) isConnectionAlive() bool {
 	return c.isActive && time.Since(inter) < 5*time.Minute
 }
 
-func (s *Server) startConnectionChecker() {
-	ticker := time.NewTicker(1 * time.Minute)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			s.checkIsConnectionsAlive()
-		}
-	}
-}
+//func (s *Server) startConnectionChecker() {
+//	ticker := time.NewTicker(1 * time.Minute)
+//	defer ticker.Stop()
+//
+//	for {
+//		select {
+//		case <-ticker.C:
+//			s.checkIsConnectionsAlive()
+//		}
+//	}
+//}
 
 // trash
 //if strings.HasPrefix(body, "SET_SETTINGS") {

@@ -1,5 +1,24 @@
 package models
 
+type Destination int
+
+const (
+	Unknown Destination = iota
+	Lora
+	Client
+)
+
+func (d Destination) String() string {
+	switch d {
+	case Lora:
+		return "Lora"
+	case Client:
+		return "Client"
+	default:
+		return "Unknown"
+	}
+}
+
 type Coordinate struct {
 	Latitude  float64
 	Longitude float64
