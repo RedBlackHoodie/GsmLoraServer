@@ -81,7 +81,7 @@ func (e *ESPConnector) Connect(ip, port string) error {
 			retryDelay = time.Duration(float64(retryDelay) * 1.5)
 		}
 	}
-
+	e.Conn = nil
 	e.isConnected = false
 	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", address, maxAttempts, err)
 }
@@ -207,7 +207,7 @@ func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(stri
 
 func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
 	reader := bufio.NewReader(e.Conn)
-
+	log.Printf("Listening on ESP32...")
 	for {
 		message, err := reader.ReadString('\n')
 		if err != nil {

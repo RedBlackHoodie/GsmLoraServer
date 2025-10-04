@@ -46,15 +46,11 @@ func (s *DataService) EspInitializer() {
 		log.Printf("Error starting listening: %v", err)
 	}
 	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
-
-	go s.processPackets()
-	go s.processInterfaceSettingsChange()
 }
 
 func (s *DataService) StartProcessing() {
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
-
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -117,7 +113,8 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
 	parts := strings.Split(cleanedMessage, ", ")
 	s.clients[conn] = models.Client
-	if s.espConnector.Conn == nil {
+
+	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
 		conn.Write([]byte("ESP_NOT_CONNECTED"))
 	} else {
 		conn.Write([]byte("ESP_CONNECTED"))
