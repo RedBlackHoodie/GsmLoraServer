@@ -82,7 +82,7 @@ func (s *DataService) ProcessPacketData(buffer string) error {
 	case s.packetChan <- &data:
 	default:
 		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
-		err := s.Repo.Save(&data)
+		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Unexpected error while saving data: %v", err)
 		}
@@ -102,7 +102,7 @@ func (s *DataService) DrainDataChannel() error {
 	for i := 0; i < len(s.packetChan); i++ {
 		select {
 		case packet := <-s.packetChan:
-			err := s.Repo.Save(packet)
+			err := s.Repo.Save(packet, 0)
 			if err != nil {
 				log.Printf("Error saving packet during drain: %v", err)
 			}
@@ -190,7 +190,7 @@ func (s *DataService) processPackets() {
 		s.mu.Unlock()
 	}()
 	for packet := range s.packetChan {
-		err := s.Repo.Save(packet)
+		err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Error saving packet during processing: %v", err)
 		}

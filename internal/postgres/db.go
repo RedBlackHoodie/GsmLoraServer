@@ -96,10 +96,16 @@ func (r *Repo) CreateSessionsTable() error {
 	return nil
 }
 
-func (r *Repo) Save(packet *models.Packet) error {
-	id, err := r.FindLastSessionId()
-	if err != nil {
-		return err
+func (r *Repo) Save(packet *models.Packet, sessionId int) error {
+	var id int
+	var err error
+	if sessionId == 0 {
+		id, err = r.FindLastSessionId()
+		if err != nil {
+			return err
+		}
+	} else {
+		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
 		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
