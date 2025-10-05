@@ -13,11 +13,12 @@ import (
 )
 
 type ESPConnector struct {
-	IP          string
-	Port        string
-	Conn        net.Conn
-	isConnected bool
-	mutex       sync.RWMutex
+	IP             string
+	Port           string
+	Conn           net.Conn
+	isConnected    bool
+	mutex          sync.RWMutex
+	CurrentSession int
 }
 
 type Message interface {
@@ -87,8 +88,8 @@ func (e *ESPConnector) Connect(ip, port string) error {
 }
 
 func (e *ESPConnector) SendCommand(command string, sessionId int) error {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
@@ -98,6 +99,7 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 	if sessionId == 0 {
 		message = command
 	} else {
+		e.CurrentSession = sessionId
 		message = fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
 	}
 
@@ -117,7 +119,6 @@ func (e *ESPConnector) SendParamsToDevice(params models.Params) error {
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
-
 	}
 
 	message := fmt.Sprintf("SET_SETTINGS: SF=%.1f, TX=%.1f, BW=%.1f", params.Sf, params.Tx, params.Bandwidth)

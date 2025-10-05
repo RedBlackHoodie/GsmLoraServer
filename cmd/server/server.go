@@ -88,16 +88,20 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		}
 		switch msg := parsedMsg.(type) {
 		case handlers.SetSettingsMessage:
-			id := "settings-change" + strconv.Itoa(count)
-			s.registerClient(id, conn)
-			s.handleSetSettings(conn, message)
-			s.updateClientInteraction(id)
+			if s.connector.IsConnected() {
+				id := "settings-change" + strconv.Itoa(count)
+				s.registerClient(id, conn)
+				s.handleSetSettings(conn, message)
+				s.updateClientInteraction(id)
+			}
 
 		case handlers.StartMeasurementMessage:
-			s.handleStartMeasurement(conn, msg.SessionId)
-			id := "start-meas" + strconv.Itoa(count)
-			s.registerClient(id, conn)
-			s.updateClientInteraction(id)
+			if s.connector.IsConnected() {
+				s.handleStartMeasurement(conn, msg.SessionId)
+				id := "start-meas" + strconv.Itoa(count)
+				s.registerClient(id, conn)
+				s.updateClientInteraction(id)
+			}
 
 		case handlers.StopMeasurementMessage: // command unused
 

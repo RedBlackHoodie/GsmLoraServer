@@ -9,6 +9,8 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -35,6 +37,24 @@ func main() {
 	}(logFile)
 
 	log.SetFlags(log.Ldate | log.Ltime | log.Lshortfile)
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Printf("Cannot get current dir: %v", err)
+	}
+
+	scriptPath := filepath.Join(wd, "pinger.sh")
+
+	if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+		log.Printf("u have to ping + arp by hand, no script found")
+	}
+	exec.Command("chmod", "+x", scriptPath).Run()
+	cmd := exec.Command("sh", scriptPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err = cmd.Run()
+	if err != nil {
+		log.Printf("cmd.Run() failed with %s\n", err)
+	}
 
 	espCfg := configs.LoadEspConfig()
 	ip, err := utils.ResolveEspHost(espCfg.EspHost, espCfg.EspMac)

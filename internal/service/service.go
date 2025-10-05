@@ -6,6 +6,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -39,6 +40,7 @@ func (s *DataService) EspInitializer() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
+		return
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go func() {
@@ -80,7 +82,7 @@ func (s *DataService) ProcessPacketData(buffer string) error {
 	case s.packetChan <- &data:
 	default:
 		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
-		err := s.Repo.Save(&data)
+		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Unexpected error while saving data: %v", err)
 		}
@@ -100,7 +102,7 @@ func (s *DataService) DrainDataChannel() error {
 	for i := 0; i < len(s.packetChan); i++ {
 		select {
 		case packet := <-s.packetChan:
-			err := s.Repo.Save(packet)
+			err := s.Repo.Save(packet, 0)
 			if err != nil {
 				log.Printf("Error saving packet during drain: %v", err)
 			}
@@ -118,6 +120,7 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
 		conn.Write([]byte("ESP_NOT_CONNECTED"))
+		return errors.New("ESP_NOT_CONNECTED")
 	} else {
 		conn.Write([]byte("ESP_CONNECTED"))
 	}
@@ -154,10 +157,19 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 }
 
 func (s *DataService) handleESPData(data string) {
+	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+		log.Printf("ESP_CONNECTION UNAVAILABLE")
+		return
+	}
 	if data == "" {
 		return
 	}
 	if strings.HasPrefix(data, "ACK") {
+		log.Printf("Got ACK: %s", data)
+		return
+	}
+	if strings.HasPrefix(data, "ERROR") {
+		log.Printf("ESP Error: %s", data)
 		return
 	}
 
@@ -178,15 +190,22 @@ func (s *DataService) processPackets() {
 		s.mu.Unlock()
 	}()
 	for packet := range s.packetChan {
-		err := s.Repo.Save(packet)
+		err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Error saving packet during processing: %v", err)
 		}
+		clientConn, _ := s.FindClientConnection()
+		s.SendPacketToClient(clientConn, *packet)
 	}
 }
 
 func (s *DataService) processInterfaceSettingsChange() {
 	for params := range s.interfaceSettingsChange {
+		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+			log.Printf("ESP_CONNECTION UNAVAILABLE")
+			return
+		}
+
 		err := s.espConnector.SendParamsToDevice(*params)
 		if err != nil {
 			log.Printf("Error sending params to device: %v", err)
@@ -196,7 +215,7 @@ func (s *DataService) processInterfaceSettingsChange() {
 	}
 }
 
-func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) {
+func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
 	if requestID == 0 {
 		var err error
 		requestID, err = s.Repo.FindLastRequestId()
@@ -219,7 +238,6 @@ func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sess
 	log.Printf("Connected to device %v", conn.RemoteAddr().String())
 	var err error
 	if sessionId == 0 {
-
 		_, err = conn.Write([]byte(command))
 
 		if err != nil {
@@ -311,13 +329,14 @@ func (s *DataService) AddClient(conn net.Conn, destination models.Destination) {
 		conn.RemoteAddr().String(), destination.String(), len(s.clients))
 }
 
-func (s *DataService) SendToClient(conn net.Conn, message string) {
+func (s *DataService) SendPacketToClient(conn net.Conn, packet models.Packet) {
 	_, exists := s.clients[conn]
 	if !exists {
 		log.Printf("Client not found on connection: %v", conn)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	message := fmt.Sprintf("MEASUREMENT: [%s, %d, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Longitude, packet.Coordinate.Latitude)
 	_, err := conn.Write([]byte(message + "\n"))
 	if err != nil {
 		log.Printf("Error sending message to client: %v", err)

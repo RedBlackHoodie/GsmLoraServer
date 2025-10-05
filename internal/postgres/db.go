@@ -96,13 +96,19 @@ func (r *Repo) CreateSessionsTable() error {
 	return nil
 }
 
-func (r *Repo) Save(packet *models.Packet) error {
-	id, err := r.FindLastSessionId()
-	if err != nil {
-		return err
+func (r *Repo) Save(packet *models.Packet, sessionId int) error {
+	var id int
+	var err error
+	if sessionId == 0 {
+		id, err = r.FindLastSessionId()
+		if err != nil {
+			return err
+		}
+	} else {
+		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"INSERT (request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id), values ($1, $2, $3, $4, $5, $6, $7, $8)",
+		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
 		packet.RequestId,
 		packet.RSSI,
 		packet.SNRL,
@@ -142,7 +148,8 @@ func (r *Repo) RemoveSession(sessionId int) error {
 }
 
 func (r *Repo) GetAllSessions() ([]models.Session, error) {
-	rows, err := r.db.Query("SELECT id, name, start_time, end_time, count FROM sessions")
+	rows, err := r.db.Query("SELECT id, name, start_time, end_time, count " +
+		"FROM sessions")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return []models.Session{}, ErrNotFound
@@ -178,7 +185,7 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 	return sessions, nil
 }
 
-func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
+func (r *Repo) FindById(requestId int) ([]models.Packet, error) {
 	rows, err := r.db.Query(
 		"SELECT "+
 			"request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
@@ -219,8 +226,8 @@ func (r *Repo) FindById(requestId int32) ([]models.Packet, error) {
 	return packets, nil
 }
 
-func (r *Repo) FindLastRequestId() (int32, error) {
-	var lastRequestId int32
+func (r *Repo) FindLastRequestId() (int, error) {
+	var lastRequestId int
 	err := r.db.QueryRow("SELECT COALESCE(MAX(request_id), 0)" +
 		" FROM packets").Scan(&lastRequestId)
 	if err != nil {
@@ -229,8 +236,8 @@ func (r *Repo) FindLastRequestId() (int32, error) {
 	return lastRequestId, nil
 }
 
-func (r *Repo) FindLastSessionId() (int32, error) {
-	var lastSessionId int32
+func (r *Repo) FindLastSessionId() (int, error) {
+	var lastSessionId int
 	err := r.db.QueryRow("SELECT COALESCE(MAX(id), 0)" +
 		" FROM sessions").Scan(&lastSessionId)
 	if err != nil {

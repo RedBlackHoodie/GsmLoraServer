@@ -26,14 +26,21 @@ RUN apk update && apk --no-cache add \
     tcpdump \
     curl \
     nmap \
+    bash \
+    sudo \
     && rm -rf /var/cache/apk/*
+
+RUN echo "appuser ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /root/
 
-COPY --from=builder /build/main .
+COPY pinger.sh .
 
+RUN chmod +x pinger.sh
+
+COPY --from=builder /build/main .
 COPY --from=builder /build/configs ./configs/
 COPY --from=builder /build/db.env .
 COPY --from=builder /build/esp.env .
