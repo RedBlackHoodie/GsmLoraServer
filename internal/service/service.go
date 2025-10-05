@@ -194,6 +194,8 @@ func (s *DataService) processPackets() {
 		if err != nil {
 			log.Printf("Error saving packet during processing: %v", err)
 		}
+		clientConn, _ := s.FindClientConnection()
+		s.SendPacketToClient(clientConn, *packet)
 	}
 }
 
@@ -327,13 +329,14 @@ func (s *DataService) AddClient(conn net.Conn, destination models.Destination) {
 		conn.RemoteAddr().String(), destination.String(), len(s.clients))
 }
 
-func (s *DataService) SendToClient(conn net.Conn, message string) {
+func (s *DataService) SendPacketToClient(conn net.Conn, packet models.Packet) {
 	_, exists := s.clients[conn]
 	if !exists {
 		log.Printf("Client not found on connection: %v", conn)
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	message := fmt.Sprintf("MEASUREMENT: [%s, %d, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Longitude, packet.Coordinate.Latitude)
 	_, err := conn.Write([]byte(message + "\n"))
 	if err != nil {
 		log.Printf("Error sending message to client: %v", err)
