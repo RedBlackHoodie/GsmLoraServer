@@ -196,7 +196,7 @@ func (s *DataService) processInterfaceSettingsChange() {
 	}
 }
 
-func (s *DataService) GetMeasurements(requestID int32) ([]models.Packet, error) {
+func (s *DataService) GetMeasurements(requestID int) ([]models.Packet, error) {
 	if requestID == 0 {
 		var err error
 		requestID, err = s.Repo.FindLastRequestId()
