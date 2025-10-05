@@ -6,6 +6,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"Lora_Esp_Gsm_Gps_project/internal/postgres"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -39,6 +40,7 @@ func (s *DataService) EspInitializer() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
+		return
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go func() {
@@ -118,6 +120,7 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
 		conn.Write([]byte("ESP_NOT_CONNECTED"))
+		return errors.New("ESP_NOT_CONNECTED")
 	} else {
 		conn.Write([]byte("ESP_CONNECTED"))
 	}
@@ -154,10 +157,19 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 }
 
 func (s *DataService) handleESPData(data string) {
+	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+		log.Printf("ESP_CONNECTION UNAVAILABLE")
+		return
+	}
 	if data == "" {
 		return
 	}
 	if strings.HasPrefix(data, "ACK") {
+		log.Printf("Got ACK: %s", data)
+		return
+	}
+	if strings.HasPrefix(data, "ERROR") {
+		log.Printf("ESP Error: %s", data)
 		return
 	}
 
@@ -187,6 +199,11 @@ func (s *DataService) processPackets() {
 
 func (s *DataService) processInterfaceSettingsChange() {
 	for params := range s.interfaceSettingsChange {
+		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+			log.Printf("ESP_CONNECTION UNAVAILABLE")
+			return
+		}
+
 		err := s.espConnector.SendParamsToDevice(*params)
 		if err != nil {
 			log.Printf("Error sending params to device: %v", err)
@@ -219,7 +236,6 @@ func (s *DataService) SendMeasurementCommand(conn net.Conn, command string, sess
 	log.Printf("Connected to device %v", conn.RemoteAddr().String())
 	var err error
 	if sessionId == 0 {
-
 		_, err = conn.Write([]byte(command))
 
 		if err != nil {
