@@ -102,7 +102,7 @@ func (r *Repo) Save(packet *models.Packet) error {
 		return err
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"INSERT (request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id), values ($1, $2, $3, $4, $5, $6, $7, $8)",
+		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
 		packet.RequestId,
 		packet.RSSI,
 		packet.SNRL,
