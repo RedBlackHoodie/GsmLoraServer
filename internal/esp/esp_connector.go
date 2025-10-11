@@ -3,6 +3,7 @@ package esp
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -93,6 +94,7 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
+		return errors.New("ESP_NOT_CONNECTED")
 	}
 
 	var message string
@@ -119,6 +121,7 @@ func (e *ESPConnector) SendParamsToDevice(params models.Params) error {
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
+		return errors.New("ESP_NOT_CONNECTED")
 	}
 
 	message := fmt.Sprintf("SET_SETTINGS: SF=%.1f, TX=%.1f, BW=%.1f", params.Sf, params.Tx, params.Bandwidth)

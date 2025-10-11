@@ -104,7 +104,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			}
 
 		case handlers.StopMeasurementMessage: // command unused
-
+			return nil
 		case handlers.GetMeasurementSessionsMessage:
 			s.handleGetMeasurementSessions(conn)
 			id := "get-sessions" + strconv.Itoa(count)

@@ -13,11 +13,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type PendingMessage struct {
 	Destination models.Destination
 	Message     string
+	Timestamp   time.Time
 }
 
 type DataService struct {
@@ -48,6 +50,7 @@ func (s *DataService) EspInitializer() {
 	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
 	if err != nil {
 		log.Printf("Error connecting to ESP: %v", err)
+		s.PendingMessages <- &PendingMessage{models.Client, "ESP_NOT_CONNECTED", time.Now()}
 		return
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
@@ -128,10 +131,11 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 	s.clients[conn] = models.Client
 
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED"}
+		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
+		s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
 		return errors.New("ESP_NOT_CONNECTED")
 	} else {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED"}
+		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
 	}
 	params := models.Params{}
 
@@ -242,6 +246,7 @@ func (s *DataService) processInterfaceSettingsChange() {
 	for params := range s.interfaceSettingsChange {
 		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
 			log.Printf("ESP_CONNECTION UNAVAILABLE")
+			s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
 			return
 		}
 
@@ -392,4 +397,20 @@ func (s *DataService) FindClientConnection() (net.Conn, bool) {
 		}
 	}
 	return clientConn, clientConn != nil
+}
+
+func (s *DataService) SaveOnlyActualPendings() {
+	s.pendingMessagesLock.RLock()
+	defer s.pendingMessagesLock.RUnlock()
+	clientPendings := make([]PendingMessage, 10)
+	for pending := range s.PendingMessages {
+		switch pending.Destination {
+		case models.Client:
+			clientPendings = append(clientPendings, *pending)
+		case models.Lora:
+
+		default:
+			continue
+		}
+	}
 }
