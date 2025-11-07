@@ -27,10 +27,10 @@ type Server struct {
 	clients            map[string]*Client
 	mutex              sync.RWMutex
 	measurementHandler core.MeasurementHandler
-	connector          *esp.ESPConnector
+	connector          esp.Connector
 }
 
-func NewServer(h core.MeasurementHandler, connector *esp.ESPConnector) *Server {
+func NewServer(h core.MeasurementHandler, connector esp.Connector) *Server {
 	return &Server{
 		clients:            make(map[string]*Client),
 		measurementHandler: h,
@@ -61,7 +61,7 @@ func (s *Server) StartServer(port string) error {
 		}
 		log.Printf("Accepted connection from %v", conn.RemoteAddr())
 		go func() {
-			err := s.handleConnection(conn)
+			err := s.HandleConnection(conn)
 			if err != nil {
 				log.Printf("Error handling connection: %v", err)
 			}
@@ -69,7 +69,7 @@ func (s *Server) StartServer(port string) error {
 	}
 }
 
-func (s *Server) handleConnection(conn net.Conn) error {
+func (s *Server) HandleConnection(conn net.Conn) error {
 	log.Printf("Client connected from %s", conn.RemoteAddr())
 	scanner := bufio.NewScanner(conn)
 	count := 0
@@ -91,7 +91,7 @@ func (s *Server) handleConnection(conn net.Conn) error {
 			if s.connector.IsConnected() {
 				id := "settings-change" + strconv.Itoa(count)
 				s.registerClient(id, conn)
-				s.handleSetSettings(conn, message)
+				s.HandleSetSettings(conn, message)
 				s.updateClientInteraction(id)
 			}
 
@@ -106,19 +106,19 @@ func (s *Server) handleConnection(conn net.Conn) error {
 		case handlers.StopMeasurementMessage: // command unused
 			return nil
 		case handlers.GetMeasurementSessionsMessage:
-			s.handleGetMeasurementSessions(conn)
+			s.HandleGetMeasurementSessions(conn)
 			id := "get-sessions" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
 		case handlers.AddSessionMessage:
-			s.handleAddSession(conn, msg.Session)
+			s.HandleAddSession(conn, msg.Session)
 			id := "add-session" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
 		case handlers.RemoveSessionMessage:
-			s.handleRemoveSession(conn, msg.SessionId)
+			s.HandleRemoveSession(conn, msg.SessionId)
 			id := "remove-session" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
@@ -203,7 +203,7 @@ func (s *Server) deleteAllClients() {
 	}
 }
 
-func (s *Server) handleSetSettings(conn net.Conn, message string) {
+func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 	go func() {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
@@ -223,7 +223,7 @@ func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 	}()
 }
 
-func (s *Server) handleGetMeasurementSessions(conn net.Conn) {
+func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 	go func() {
 		sessions, err := s.measurementHandler.GetAllSessions()
 		if err != nil {
@@ -251,7 +251,7 @@ func (s *Server) handleGetMeasurementSessions(conn net.Conn) {
 	}()
 }
 
-func (s *Server) handleAddSession(conn net.Conn, session models.Session) {
+func (s *Server) HandleAddSession(conn net.Conn, session models.Session) {
 	err := s.measurementHandler.SaveSession(session)
 	if err != nil {
 		log.Printf("Error saving session: %v", err)
@@ -261,7 +261,7 @@ func (s *Server) handleAddSession(conn net.Conn, session models.Session) {
 	log.Printf("Session saved: %v", session)
 }
 
-func (s *Server) handleRemoveSession(conn net.Conn, sessionId int) {
+func (s *Server) HandleRemoveSession(conn net.Conn, sessionId int) {
 	err := s.measurementHandler.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)

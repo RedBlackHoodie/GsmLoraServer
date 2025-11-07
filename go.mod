@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/adrianmo/go-nmea v1.10.0
+	github.com/golang/mock v1.6.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/joho/godotenv v1.5.1
 )
