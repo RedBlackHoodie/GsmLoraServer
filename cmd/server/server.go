@@ -125,6 +125,14 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 
 		case handlers.UnknownMessageMessage:
 			log.Printf("Unknown message type: %v", message)
+
+		case handlers.EspMessage:
+			log.Printf("Esp message received: %v", msg)
+			s.HandleEspConnection(conn)
+			id := "identify_esp" + strconv.Itoa(count)
+			s.registerClient(id, conn)
+			s.updateClientInteraction(id)
+
 		default:
 			log.Printf("Unhandled message type: %T", msg)
 		}
@@ -269,6 +277,18 @@ func (s *Server) HandleRemoveSession(conn net.Conn, sessionId int) {
 		return
 	}
 	log.Printf("Session removed: %v", sessionId)
+}
+
+func (s *Server) HandleEspConnection(conn net.Conn) {
+	s.connector.SetConnected(true)
+	s.connector.SetIP(conn.RemoteAddr().String())
+	s.connector.SetConn(conn)
+	log.Printf("Connection from esp: %v", conn.RemoteAddr().String())
+	log.Printf("ESP_OK")
+	_, err := conn.Write([]byte("OK\n"))
+	if err != nil {
+		return
+	}
 }
 
 func (c *Client) setInactive() {

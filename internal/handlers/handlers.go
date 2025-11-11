@@ -172,6 +172,8 @@ type IncomingMeasurementMessage struct {
 	sessionId int
 }
 
+type EspMessage struct{}
+
 type UnknownMessageMessage struct{}
 
 func (m SetSettingsMessage) Type() string            { return "SET_SETTINGS" }
@@ -182,6 +184,7 @@ func (m GetMeasurementSessionsMessage) Type() string { return "GET_MEASUREMENT_S
 func (m AddSessionMessage) Type() string             { return "ADD_SESSION" }
 func (m RemoveSessionMessage) Type() string          { return "REMOVE_SESSION" }
 func (m UnknownMessageMessage) Type() string         { return "UNKNOWN" }
+func (m EspMessage) Type() string                    { return "ESP" }
 
 type GetMessage struct {
 	What string
@@ -241,6 +244,8 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			return nil, err
 		}
 		return RemoveSessionMessage{SessionId: sessionId}, nil
+	} else if strings.HasPrefix(message, "IDENTIFY") {
+		return EspMessage{}, nil
 	}
 
 	return UnknownMessageMessage{}, nil

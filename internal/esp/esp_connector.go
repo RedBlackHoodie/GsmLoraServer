@@ -45,6 +45,53 @@ type GetMessage struct {
 	What string
 }
 
+func (e *ESPConnector) GetIP() string {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.IP
+}
+
+func (e *ESPConnector) GetPort() string {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.Port
+}
+
+func (e *ESPConnector) GetConn() net.Conn {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.Conn
+}
+func (e *ESPConnector) SetIP(ip string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.IP = ip
+}
+
+func (e *ESPConnector) SetPort(port string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.Port = port
+}
+
+func (e *ESPConnector) SetConn(conn net.Conn) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.Conn = conn
+}
+
+func (e *ESPConnector) SetConnected(connected bool) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.isConnected = connected
+}
+
+func (e *ESPConnector) SetCurrentSession(session int) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.CurrentSession = session
+}
+
 func NewESPConnector() *ESPConnector {
 	return &ESPConnector{
 		isConnected: false,
