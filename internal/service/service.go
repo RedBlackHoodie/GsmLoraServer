@@ -46,21 +46,28 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 	return service
 }
 
-func (s *DataService) EspInitializer() {
-	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
-	if err != nil {
-		log.Printf("Error connecting to ESP: %v", err)
-		s.PendingMessages <- &PendingMessage{models.Client, "ESP_NOT_CONNECTED", time.Now()}
-		return
+func (s *DataService) EspInitializer(connector esp.Connector) error {
+	s.espConnector = connector.(*esp.ESPConnector)
+	if s.espConnector == nil {
+		return errors.New("esp connector is nilptr")
+	}
+	if !s.espConnector.IsConnected() {
+		err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
+		if err != nil {
+			log.Printf("Error connecting to ESP: %v", err)
+			s.PendingMessages <- &PendingMessage{models.Client, "ESP_NOT_CONNECTED", time.Now()}
+			return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
+		}
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go func() {
-		err = s.espConnector.ListeningStart(s.handleESPData)
+		err := s.espConnector.ListeningStart(s.handleESPData)
 		if err != nil {
 			log.Printf("Error starting listening: %v", err)
 		}
 	}()
 	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
+	return nil
 }
 
 func (s *DataService) StartProcessing() {

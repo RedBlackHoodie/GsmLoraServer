@@ -1,6 +1,7 @@
 package core
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"context"
 	"database/sql"
@@ -32,4 +33,5 @@ type MeasurementHandler interface {
 	SendAllSessions(conn net.Conn, data string) error
 	SaveSession(session models.Session) error
 	RemoveSession(sessionId int) error
+	EspInitializer(espConnector esp.Connector) error
 }

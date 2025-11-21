@@ -28,6 +28,8 @@ type Server struct {
 	mutex              sync.RWMutex
 	measurementHandler core.MeasurementHandler
 	connector          esp.Connector
+	waitList           []Client
+	waitListMutex      sync.RWMutex
 }
 
 func NewServer(h core.MeasurementHandler, connector esp.Connector) *Server {
@@ -75,7 +77,6 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 	count := 0
 
 	//go s.startConnectionChecker()
-
 	for scanner.Scan() {
 		message := scanner.Text()
 
@@ -283,9 +284,14 @@ func (s *Server) HandleEspConnection(conn net.Conn) {
 	s.connector.SetConnected(true)
 	s.connector.SetIP(conn.RemoteAddr().String())
 	s.connector.SetConn(conn)
+	err := s.measurementHandler.EspInitializer(s.connector)
+	if err != nil {
+		log.Printf("Error initializing Esp: %v", err)
+		return
+	}
 	log.Printf("Connection from esp: %v", conn.RemoteAddr().String())
 	log.Printf("ESP_OK")
-	_, err := conn.Write([]byte("OK\n"))
+	_, err = conn.Write([]byte("OK\n"))
 	if err != nil {
 		return
 	}
