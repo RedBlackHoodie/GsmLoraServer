@@ -6,6 +6,7 @@ import (
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -28,7 +29,7 @@ type Server struct {
 	mutex              sync.RWMutex
 	measurementHandler core.MeasurementHandler
 	connector          esp.Connector
-	waitList           []Client
+	waitList           []net.Conn
 	waitListMutex      sync.RWMutex
 }
 
@@ -89,36 +90,50 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		}
 		switch msg := parsedMsg.(type) {
 		case handlers.SetSettingsMessage:
+			id := "settings-change" + strconv.Itoa(count)
 			if s.connector.IsConnected() {
-				id := "settings-change" + strconv.Itoa(count)
 				s.registerClient(id, conn)
 				s.HandleSetSettings(conn, message)
 				s.updateClientInteraction(id)
+			} else {
+				s.waitListMutex.Lock()
+				defer s.waitListMutex.Unlock()
+				s.waitList = append(s.waitList, conn)
+				log.Printf("Client %s waiting for esp connection, ", id)
+				s.measurementHandler.AddPendingMessage(message, models.Lora)
+				return s.waitForEspConnection(conn)
 			}
 
 		case handlers.StartMeasurementMessage:
+			id := "start-meas" + strconv.Itoa(count)
 			if s.connector.IsConnected() {
 				s.handleStartMeasurement(conn, msg.SessionId)
-				id := "start-meas" + strconv.Itoa(count)
 				s.registerClient(id, conn)
 				s.updateClientInteraction(id)
+			} else {
+				s.waitListMutex.Lock()
+				defer s.waitListMutex.Unlock()
+				s.waitList = append(s.waitList, conn)
+				log.Printf("Client %s waiting for esp connection, ", id)
+				s.measurementHandler.AddPendingMessage(message, models.Lora)
+				return s.waitForEspConnection(conn)
 			}
 
 		case handlers.StopMeasurementMessage: // command unused
 			return nil
-		case handlers.GetMeasurementSessionsMessage:
+		case handlers.GetMeasurementSessionsMessage: //esp not used here
 			s.HandleGetMeasurementSessions(conn)
 			id := "get-sessions" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
-		case handlers.AddSessionMessage:
+		case handlers.AddSessionMessage: //esp not used here
 			s.HandleAddSession(conn, msg.Session)
 			id := "add-session" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
-		case handlers.RemoveSessionMessage:
+		case handlers.RemoveSessionMessage: // esp not used here
 			s.HandleRemoveSession(conn, msg.SessionId)
 			id := "remove-session" + strconv.Itoa(count)
 			s.registerClient(id, conn)
@@ -172,8 +187,56 @@ func (s *Server) unregisterClient(deviceID string) {
 			return
 		}
 		delete(s.clients, deviceID)
-		log.Printf("Unregistered client: %s", deviceID)
+		log.Printf("Deregistered client: %s", deviceID)
 	}
+}
+
+func (s *Server) waitForEspConnection(conn net.Conn) error {
+	for {
+		select {
+		case <-time.After(30 * time.Second):
+			conn.Write([]byte("ERROR: ESP connection timeout\n"))
+			s.removeWaitingClient(conn)
+			return errors.New("ESP connection timeout")
+		default:
+			if s.connector.IsConnected() {
+				conn.Write([]byte("ESP_CONNECTED\n"))
+				s.removeWaitingClient(conn)
+				return nil
+			} else {
+				conn.Write([]byte("ERROR: ESP connection timeout\n"))
+				s.removeWaitingClient(conn)
+				return errors.New("ESP connection timeout")
+			}
+		}
+	}
+}
+
+func (s *Server) addWaitingClient(conn net.Conn) {
+	s.waitListMutex.Lock()
+	defer s.waitListMutex.Unlock()
+	s.waitList = append(s.waitList, conn)
+}
+
+func (s *Server) removeWaitingClient(conn net.Conn) {
+	s.waitListMutex.Lock()
+	defer s.waitListMutex.Unlock()
+	for i, connection := range s.waitList {
+		if connection == conn {
+			s.waitList = append(s.waitList[:i], s.waitList[i+1:]...)
+			break
+		}
+	}
+}
+
+func (s *Server) notifyWaitingClients() {
+	s.waitListMutex.Lock()
+	defer s.waitListMutex.Unlock()
+
+	for _, conn := range s.waitList {
+		conn.Write([]byte("ESP_CONNECTED_PROCEEDING\n"))
+	}
+	s.waitList = nil
 }
 
 //func (s *Server) checkIsConnectionsAlive() {

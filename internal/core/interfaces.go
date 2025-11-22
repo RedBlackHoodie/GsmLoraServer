@@ -34,4 +34,5 @@ type MeasurementHandler interface {
 	SaveSession(session models.Session) error
 	RemoveSession(sessionId int) error
 	EspInitializer(espConnector esp.Connector) error
+	AddPendingMessage(message string, dest models.Destination) error
 }
