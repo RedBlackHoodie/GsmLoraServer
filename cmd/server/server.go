@@ -98,7 +98,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			} else {
 				s.waitListMutex.Lock()
 				defer s.waitListMutex.Unlock()
-				s.waitList = append(s.waitList, conn)
+				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora)
 				return s.waitForEspConnection(conn)
@@ -113,7 +113,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			} else {
 				s.waitListMutex.Lock()
 				defer s.waitListMutex.Unlock()
-				s.waitList = append(s.waitList, conn)
+				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora)
 				return s.waitForEspConnection(conn)
@@ -139,7 +139,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
-		case handlers.UnknownMessageMessage:
+		case handlers.UnknownMessage:
 			log.Printf("Unknown message type: %v", message)
 
 		case handlers.EspMessage:
@@ -202,6 +202,7 @@ func (s *Server) waitForEspConnection(conn net.Conn) error {
 			if s.connector.IsConnected() {
 				conn.Write([]byte("ESP_CONNECTED\n"))
 				s.removeWaitingClient(conn)
+				s.notifyWaitingClients()
 				return nil
 			} else {
 				conn.Write([]byte("ERROR: ESP connection timeout\n"))

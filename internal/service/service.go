@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +17,7 @@ import (
 
 type PendingMessage struct {
 	Destination models.Destination
+	Type        handlers.Message
 	Message     string
 	Timestamp   time.Time
 }
@@ -55,7 +55,7 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 		err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
 		if err != nil {
 			log.Printf("Error connecting to ESP: %v", err)
-			s.PendingMessages <- &PendingMessage{models.Client, "ESP_NOT_CONNECTED", time.Now()}
+			s.PendingMessages <- &PendingMessage{models.Client, handlers.InitialEspConnectionMessage{}, "ESP_NOT_CONNECTED", time.Now()}
 			return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 		}
 	}
@@ -132,49 +132,49 @@ func (s *DataService) DrainDataChannel() error {
 	return nil
 }
 
-func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
-	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
-	parts := strings.Split(cleanedMessage, ", ")
-	s.clients[conn] = models.Client
-
-	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
-		s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
-		return errors.New("ESP_NOT_CONNECTED")
-	} else {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
-	}
-	params := models.Params{}
-
-	for _, part := range parts {
-		keyVal := strings.Split(part, "=")
-		if len(keyVal) != 2 {
-			continue
-		}
-
-		key := strings.TrimSpace(keyVal[0])
-		value := strings.TrimSpace(keyVal[1])
-
-		val, err := strconv.ParseFloat(value, 32)
-		if err != nil {
-			return fmt.Errorf("invalid value for %s: %w", key, err)
-		}
-
-		switch key {
-		case "SF":
-			params.Sf = float32(val)
-		case "TX":
-			params.Tx = float32(val)
-		case "BW":
-			params.Bandwidth = float32(val)
-		}
-	}
-
-	log.Printf("Got params: %+v\n", params)
-	s.interfaceSettingsChange <- &params
-
-	return nil
-}
+//func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
+//	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+//	parts := strings.Split(cleanedMessage, ", ")
+//	s.clients[conn] = models.Client
+//
+//	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+//		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
+//		s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
+//		return errors.New("ESP_NOT_CONNECTED")
+//	} else {
+//		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
+//	}
+//	params := models.Params{}
+//
+//	for _, part := range parts {
+//		keyVal := strings.Split(part, "=")
+//		if len(keyVal) != 2 {
+//			continue
+//		}
+//
+//		key := strings.TrimSpace(keyVal[0])
+//		value := strings.TrimSpace(keyVal[1])
+//
+//		val, err := strconv.ParseFloat(value, 32)
+//		if err != nil {
+//			return fmt.Errorf("invalid value for %s: %w", key, err)
+//		}
+//
+//		switch key {
+//		case "SF":
+//			params.Sf = float32(val)
+//		case "TX":
+//			params.Tx = float32(val)
+//		case "BW":
+//			params.Bandwidth = float32(val)
+//		}
+//	}
+//
+//	log.Printf("Got params: %+v\n", params)
+//	s.interfaceSettingsChange <- &params
+//
+//	return nil
+//}
 
 func (s *DataService) handleESPData(data string) {
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
@@ -253,7 +253,7 @@ func (s *DataService) processInterfaceSettingsChange() {
 	for params := range s.interfaceSettingsChange {
 		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
 			log.Printf("ESP_CONNECTION UNAVAILABLE")
-			s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
+			s.PendingMessages <- &PendingMessage{Destination: models.Client, Type: handlers.SetSettingsMessage{}, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
 			return
 		}
 
@@ -409,15 +409,12 @@ func (s *DataService) FindClientConnection() (net.Conn, bool) {
 func (s *DataService) SaveOnlyActualPendings() {
 	s.pendingMessagesLock.RLock()
 	defer s.pendingMessagesLock.RUnlock()
-	clientPendings := make([]PendingMessage, 10)
-	for pending := range s.PendingMessages {
-		switch pending.Destination {
-		case models.Client:
-			clientPendings = append(clientPendings, *pending)
-		case models.Lora:
-
-		default:
-			continue
-		}
-	}
+	//for pending := range s.PendingMessages {
+	//	switch pending.Type {
+	//	case :
+	//
+	//	default:
+	//		log.Printf("Unrecognized pending message type: %v", pending.Type.Type())
+	//	}
+	//}
 }
