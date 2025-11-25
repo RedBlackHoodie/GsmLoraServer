@@ -8,6 +8,10 @@ import (
 	"net"
 )
 
+type Message interface {
+	Type() string
+}
+
 type Repository interface {
 	FindById(ctx context.Context, id int) (interface{}, error)
 }
@@ -34,5 +38,5 @@ type MeasurementHandler interface {
 	SaveSession(session models.Session) error
 	RemoveSession(sessionId int) error
 	EspInitializer(espConnector esp.Connector) error
-	AddPendingMessage(message string, dest models.Destination) error
+	AddPendingMessage(message string, dest models.Destination, typ Message)
 }

@@ -100,7 +100,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
-				s.measurementHandler.AddPendingMessage(message, models.Lora)
+				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.SetSettingsMessage{})
 				return s.waitForEspConnection(conn)
 			}
 
@@ -115,7 +115,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
-				s.measurementHandler.AddPendingMessage(message, models.Lora)
+				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.StartMeasurementMessage{})
 				return s.waitForEspConnection(conn)
 			}
 

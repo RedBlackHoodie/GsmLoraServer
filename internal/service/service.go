@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
@@ -10,6 +11,8 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -74,6 +77,7 @@ func (s *DataService) StartProcessing() {
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
 	go s.processPendingMessages()
+	go s.StartMessageFiltering()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -132,49 +136,49 @@ func (s *DataService) DrainDataChannel() error {
 	return nil
 }
 
-//func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
-//	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
-//	parts := strings.Split(cleanedMessage, ", ")
-//	s.clients[conn] = models.Client
-//
-//	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-//		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
-//		s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
-//		return errors.New("ESP_NOT_CONNECTED")
-//	} else {
-//		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
-//	}
-//	params := models.Params{}
-//
-//	for _, part := range parts {
-//		keyVal := strings.Split(part, "=")
-//		if len(keyVal) != 2 {
-//			continue
-//		}
-//
-//		key := strings.TrimSpace(keyVal[0])
-//		value := strings.TrimSpace(keyVal[1])
-//
-//		val, err := strconv.ParseFloat(value, 32)
-//		if err != nil {
-//			return fmt.Errorf("invalid value for %s: %w", key, err)
-//		}
-//
-//		switch key {
-//		case "SF":
-//			params.Sf = float32(val)
-//		case "TX":
-//			params.Tx = float32(val)
-//		case "BW":
-//			params.Bandwidth = float32(val)
-//		}
-//	}
-//
-//	log.Printf("Got params: %+v\n", params)
-//	s.interfaceSettingsChange <- &params
-//
-//	return nil
-//}
+func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
+	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+	parts := strings.Split(cleanedMessage, ", ")
+	s.clients[conn] = models.Client
+
+	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
+		s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
+		return errors.New("ESP_NOT_CONNECTED")
+	} else {
+		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
+	}
+	params := models.Params{}
+
+	for _, part := range parts {
+		keyVal := strings.Split(part, "=")
+		if len(keyVal) != 2 {
+			continue
+		}
+
+		key := strings.TrimSpace(keyVal[0])
+		value := strings.TrimSpace(keyVal[1])
+
+		val, err := strconv.ParseFloat(value, 32)
+		if err != nil {
+			return fmt.Errorf("invalid value for %s: %w", key, err)
+		}
+
+		switch key {
+		case "SF":
+			params.Sf = float32(val)
+		case "TX":
+			params.Tx = float32(val)
+		case "BW":
+			params.Bandwidth = float32(val)
+		}
+	}
+
+	log.Printf("Got params: %+v\n", params)
+	s.interfaceSettingsChange <- &params
+
+	return nil
+}
 
 func (s *DataService) handleESPData(data string) {
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
@@ -406,15 +410,59 @@ func (s *DataService) FindClientConnection() (net.Conn, bool) {
 	return clientConn, clientConn != nil
 }
 
+func (s *DataService) StartMessageFiltering() {
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				s.SaveOnlyActualPendings()
+			}
+		}
+	}()
+}
+
+func (s *DataService) AddPendingMessage(message string, destination models.Destination, typ core.Message) {
+	s.pendingMessagesLock.Lock()
+	defer s.pendingMessagesLock.Unlock()
+	s.PendingMessages <- &PendingMessage{Message: message, Destination: destination, Timestamp: time.Now(), Type: typ}
+}
+
 func (s *DataService) SaveOnlyActualPendings() {
-	s.pendingMessagesLock.RLock()
-	defer s.pendingMessagesLock.RUnlock()
-	//for pending := range s.PendingMessages {
-	//	switch pending.Type {
-	//	case :
-	//
-	//	default:
-	//		log.Printf("Unrecognized pending message type: %v", pending.Type.Type())
-	//	}
-	//}
+	latest := make(map[reflect.Type]*PendingMessage)
+
+	s.pendingMessagesLock.Lock()
+
+	var tempMessages []*PendingMessage
+	for {
+		select {
+		case msg := <-s.PendingMessages:
+			tempMessages = append(tempMessages, msg)
+		default:
+			goto Process
+		}
+	}
+
+Process:
+	s.pendingMessagesLock.Unlock()
+
+	for _, msg := range tempMessages {
+		msgType := reflect.TypeOf(msg.Type)
+		if existing, exists := latest[msgType]; !exists ||
+			msg.Timestamp.After(existing.Timestamp) {
+			latest[msgType] = msg
+		}
+	}
+
+	s.pendingMessagesLock.Lock()
+	defer s.pendingMessagesLock.Unlock()
+
+	for _, msg := range latest {
+		select {
+		case s.PendingMessages <- msg:
+		default:
+			log.Printf("Channel full, message lost: %v", msg)
+		}
+	}
 }
