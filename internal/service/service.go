@@ -449,7 +449,9 @@ func (s *DataService) AddPendingMessage(message string, destination models.Desti
 	if existing, exists := s.PendingMessages[msgType]; !exists ||
 		msg.Timestamp.After(existing.Timestamp) {
 		s.PendingMessages[msgType] = msg
+		log.Printf("Added new pending message: %v", msg)
 	}
+	log.Printf("Havent added pending message: %v", msg)
 }
 
 func (s *DataService) onEspConnected() {
