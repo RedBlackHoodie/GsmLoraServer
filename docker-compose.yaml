@@ -25,17 +25,19 @@ services:
     container_name: gsmloraserver_app
     environment:
       DB_HOST: postgres
-      DB_PORT: ${DB_PORT:-5432}
+      DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-lora_db}
-    network_mode: host
-    privileged: true
-    extra_hosts:
-      - "postgres:127.0.0.1"
-    cap_add:
-      - NET_RAW
-      - NET_ADMIN
+    ports:
+      - "8080:8080"
+#    network_mode: host
+#    privileged: true
+#    extra_hosts:
+#      - "postgres:127.0.0.1"
+#    cap_add:
+#      - NET_RAW
+#      - NET_ADMIN
     depends_on:
       - postgres
     restart: unless-stopped
