@@ -44,7 +44,7 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 		interfaceSettingsChange: make(chan *models.Params, 10),
 		espConnector:            connector,
 		clients:                 make(map[net.Conn]models.Destination, 10),
-		PendingMessages:         make(map[reflect.Type]*PendingMessage, 20),
+		PendingMessages:         make(map[reflect.Type]*PendingMessage, 5),
 	}
 	return service
 }
@@ -76,7 +76,7 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 func (s *DataService) StartProcessing() {
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
-	//go s.processPendingMessages()
+	go s.processPendingMessages()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -141,12 +141,9 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 	s.clients[conn] = models.Client
 
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		//s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED", Timestamp: time.Now()}
-		//s.PendingMessages <- &PendingMessage{Destination: models.Lora, Message: message, Timestamp: time.Now()}
 		return errors.New("ESP_NOT_CONNECTED")
-	} else {
-		//s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED", Timestamp: time.Now()}
 	}
+
 	params := models.Params{}
 
 	for _, part := range parts {
@@ -222,36 +219,53 @@ func (s *DataService) processPackets() {
 	}
 }
 
-//
-//func (s *DataService) processPendingMessages() {
-//	s.pendingMessagesLock.Lock()
-//	defer s.pendingMessagesLock.Unlock()
-//	for pending := range s.PendingMessages {
-//		switch pending.Destination {
-//		case models.Lora:
-//			if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-//				log.Printf("ESP_CONNECTION UNAVAILABLE")
-//				continue
-//			}
-//			err := s.SendMeasurementCommand(s.espConnector.Conn, pending.Message, s.espConnector.CurrentSession)
-//			if err != nil {
-//				log.Printf("Error sending message to ESP: %v", err)
-//			}
-//		case models.Client:
-//			clientConn, exists := s.FindClientConnection()
-//			if !exists {
-//				log.Printf("No client connection found")
-//				continue
-//			}
-//			err := s.SendMeasurementsToClient(clientConn, pending.Message)
-//			if err != nil {
-//				log.Printf("Error sending message to client: %v", err)
-//			}
-//		default:
-//			log.Printf("Unknown destination: %v", pending.Destination)
-//		}
-//	}
-//}
+func (s *DataService) processPendingMessages() {
+	s.pendingMessagesLock.Lock()
+	defer s.pendingMessagesLock.Unlock()
+	for _, pending := range s.PendingMessages {
+		switch pending.Type {
+		case handlers.SetSettingsMessage{}:
+			if s.espConnector.IsConnected() {
+				conn, exist := s.FindEspConnection()
+				if !exist {
+					log.Printf("NO_ESP_CONNECTION FOUND")
+				}
+				err := s.ProcessInterfaceSettingChange(conn, pending.Message)
+				if err != nil {
+					log.Printf("Error processing pending settings change: %v", err)
+				}
+				log.Printf("Pending settings processed successfully")
+			} else {
+				log.Printf("ESP not connected, skipping pending settings")
+				continue
+			}
+		case handlers.StartMeasurementMessage{}:
+			if s.espConnector.IsConnected() {
+				conn, exist := s.FindEspConnection()
+				if !exist {
+					log.Printf("NO_ESP_CONNECTION FOUND")
+				}
+				msg, err := handlers.ParseClientMessage(s, pending.Message)
+
+				if err != nil {
+					log.Printf("Error parsing client message: %v", err)
+				}
+				switch m := msg.(type) {
+				case handlers.StartMeasurementMessage:
+					err = s.SendMeasurementCommand(conn, "START_MEASUREMENT", m.SessionId)
+					if err != nil {
+						log.Printf("Error processing pending settings change: %v", err)
+					}
+				}
+				log.Printf("Pending settings processed successfully")
+			} else {
+				continue
+			}
+		default:
+			log.Printf("Unexpected pending message type: %s", pending.Type)
+		}
+	}
+}
 
 func (s *DataService) processInterfaceSettingsChange() {
 	for params := range s.interfaceSettingsChange {
@@ -409,6 +423,16 @@ func (s *DataService) FindClientConnection() (net.Conn, bool) {
 	return clientConn, clientConn != nil
 }
 
+func (s *DataService) FindEspConnection() (net.Conn, bool) {
+	var espConn net.Conn
+	for conn, dest := range s.clients {
+		if dest == models.Lora {
+			espConn = conn
+		}
+	}
+	return espConn, espConn != nil
+}
+
 func (s *DataService) AddPendingMessage(message string, destination models.Destination, messageType core.Message) {
 	s.pendingMessagesLock.Lock()
 	defer s.pendingMessagesLock.Unlock()
@@ -425,5 +449,26 @@ func (s *DataService) AddPendingMessage(message string, destination models.Desti
 	if existing, exists := s.PendingMessages[msgType]; !exists ||
 		msg.Timestamp.After(existing.Timestamp) {
 		s.PendingMessages[msgType] = msg
+	}
+}
+
+func (s *DataService) onEspConnected() {
+	log.Printf("ESP connected, processing pending messages")
+	s.processPendingMessages()
+}
+
+func (s *DataService) StartPendingProcessing() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if s.espConnector.IsConnected() {
+				s.pendingMessagesLock.Lock()
+				s.onEspConnected()
+				s.pendingMessagesLock.Unlock()
+			}
+		}
 	}
 }
