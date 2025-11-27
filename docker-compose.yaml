@@ -7,7 +7,7 @@ services:
     env_file:
       - db.env
     ports:
-      - "${DB_PORT:-5432}:5432"
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -27,15 +27,11 @@ services:
     build: .
     container_name: gsmloraserver_app
     environment:
-      DB_HOST: postgres
+      DB_HOST: localhost
       DB_PORT: 5432
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-lora_db}
-#    ports:
-#      - "0.0.0.0:8080:8080"
-#    networks:
-#      - lora-network
     network_mode: host
     depends_on:
       postgres:
