@@ -192,22 +192,20 @@ func (s *Server) unregisterClient(deviceID string) {
 }
 
 func (s *Server) waitForEspConnection(conn net.Conn) error {
+	timeout := time.After(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
-		case <-time.After(30 * time.Second):
-			conn.Write([]byte("ERROR: ESP connection timeout\n"))
+		case <-timeout:
 			s.removeWaitingClient(conn)
 			return errors.New("ESP connection timeout")
-		default:
+		case <-ticker.C:
 			if s.connector.IsConnected() {
-				conn.Write([]byte("ESP_CONNECTED\n"))
 				s.removeWaitingClient(conn)
 				s.notifyWaitingClients()
 				return nil
-			} else {
-				conn.Write([]byte("ERROR: ESP connection timeout\n"))
-				s.removeWaitingClient(conn)
-				return errors.New("ESP connection timeout")
 			}
 		}
 	}
@@ -215,8 +213,8 @@ func (s *Server) waitForEspConnection(conn net.Conn) error {
 
 func (s *Server) addWaitingClient(conn net.Conn) {
 	s.waitListMutex.Lock()
-	defer s.waitListMutex.Unlock()
 	s.waitList = append(s.waitList, conn)
+	s.waitListMutex.Unlock()
 }
 
 func (s *Server) removeWaitingClient(conn net.Conn) {
