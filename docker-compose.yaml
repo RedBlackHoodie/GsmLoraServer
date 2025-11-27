@@ -32,10 +32,11 @@ services:
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-password}
       DB_NAME: ${DB_NAME:-lora_db}
-    ports:
-      - "8080:8080"
-    networks:
-      - lora-network
+#    ports:
+#      - "0.0.0.0:8080:8080"
+#    networks:
+#      - lora-network
+    network_mode: host
     depends_on:
       postgres:
         condition: service_healthy
