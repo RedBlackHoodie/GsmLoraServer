@@ -80,43 +80,58 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 	//go s.startConnectionChecker()
 	for scanner.Scan() {
 		message := scanner.Text()
-
+		log.Printf("Got message: %s", message)
 		parsedMsg, err := handlers.ParseClientMessage(s.measurementHandler, message)
 
 		if err != nil {
 			log.Printf("Error parsing message: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			continue
 		}
+
+		log.Printf("Parsed message type: %T", parsedMsg)
 		switch msg := parsedMsg.(type) {
 		case handlers.SetSettingsMessage:
 			id := "settings-change" + strconv.Itoa(count)
+			log.Printf("Setting change %s", id)
 			if s.connector.IsConnected() {
 				s.registerClient(id, conn)
 				s.HandleSetSettings(conn, message)
 				s.updateClientInteraction(id)
 			} else {
+				log.Printf("Error branch for SSM")
 				s.waitListMutex.Lock()
 				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.SetSettingsMessage{})
-				return s.waitForEspConnection(conn)
+				go func() {
+					err := s.waitForEspConnection(conn)
+					if err != nil {
+						log.Printf("Error waiting for esp connection: %v", err)
+					}
+				}()
 			}
 
 		case handlers.StartMeasurementMessage:
 			id := "start-meas" + strconv.Itoa(count)
+			log.Printf("Starting handling measurement for %s", id)
 			if s.connector.IsConnected() {
 				s.handleStartMeasurement(conn, msg.SessionId)
 				s.registerClient(id, conn)
 				s.updateClientInteraction(id)
 			} else {
+				log.Printf("im in error branch in SMM u fucker")
 				s.waitListMutex.Lock()
 				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.StartMeasurementMessage{})
-				return s.waitForEspConnection(conn)
+				go func() {
+					err := s.waitForEspConnection(conn)
+					if err != nil {
+						log.Printf("Error waiting for esp connection: %v", err)
+					}
+				}()
 			}
 
 		case handlers.StopMeasurementMessage: // command unused
@@ -193,6 +208,7 @@ func (s *Server) unregisterClient(deviceID string) {
 
 func (s *Server) waitForEspConnection(conn net.Conn) error {
 	timeout := time.After(30 * time.Second)
+	log.Printf("Waiting for esp connection to establish")
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -200,6 +216,7 @@ func (s *Server) waitForEspConnection(conn net.Conn) error {
 		select {
 		case <-timeout:
 			s.removeWaitingClient(conn)
+			log.Printf("Client %s not waiting for esp connection to establish, timeout", conn.RemoteAddr())
 			return errors.New("ESP connection timeout")
 		case <-ticker.C:
 			if s.connector.IsConnected() {
@@ -214,6 +231,7 @@ func (s *Server) waitForEspConnection(conn net.Conn) error {
 func (s *Server) addWaitingClient(conn net.Conn) {
 	s.waitListMutex.Lock()
 	s.waitList = append(s.waitList, conn)
+	log.Printf("Adding waiting client: %s", conn.RemoteAddr())
 	s.waitListMutex.Unlock()
 }
 
@@ -228,13 +246,21 @@ func (s *Server) removeWaitingClient(conn net.Conn) {
 	}
 }
 
+func (s *Server) removeAllWaitingClients() {
+	s.waitListMutex.Lock()
+	defer s.waitListMutex.Unlock()
+	for _, connection := range s.waitList {
+		s.removeWaitingClient(connection)
+	}
+}
+
 func (s *Server) notifyWaitingClients() {
 	s.waitListMutex.Lock()
 	defer s.waitListMutex.Unlock()
-
-	for _, conn := range s.waitList {
-		conn.Write([]byte("ESP_CONNECTED_PROCEEDING\n"))
-	}
+	//
+	//for _, conn := range s.waitList {
+	//	conn.Write([]byte("ESP_CONNECTED_PROCEEDING\n"))
+	//}
 	s.waitList = nil
 }
 
@@ -386,99 +412,4 @@ func (c *Client) isConnectionAlive() bool {
 //			s.checkIsConnectionsAlive()
 //		}
 //	}
-//}
-
-// trash
-//if strings.HasPrefix(body, "SET_SETTINGS") {
-//go func() {
-//err := s.measurementHandler.ProcessInterfaceSettingChange(message)
-//if err != nil {
-//log.Printf("Error processing interface request: %v", err)
-//}
-//}()
-//} else if strings.HasPrefix(body, "START_MEASUREMENT") {
-//s.registerClient("start_meas"+strconv.Itoa(count), conn)
-//cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
-//
-//sessionID, err := strconv.Atoi(strings.TrimSpace(cleaned))
-//if err != nil {
-//return fmt.Errorf("invalid request ID: %w", err)
-//}
-//go func() {
-//espCfg := configs.LoadEspConfig()
-//err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "START_MEASUREMENT", sessionID)
-//if err != nil {
-//log.Printf("Error processing interface request: %v", err)
-//}
-//}()
-//} else if strings.HasPrefix(body, "STOP_MEASUREMENT") {
-//s.registerClient("stop_meas"+strconv.Itoa(count), conn)
-//go func() {
-//espCfg := configs.LoadEspConfig()
-//err := s.measurementHandler.SendMeasurementCommand(espCfg.EspIP, espCfg.EspPort, "STOP_MEASUREMENT", 0)
-//if err != nil {
-//log.Printf("Error processing interface request: %v", err)
-//}
-//}()
-//} else if strings.HasPrefix(message, "GET_MEASUREMENT_SESSIONS") {
-//s.registerClient("get_sessions"+strconv.Itoa(count), conn)
-//go func() {
-//sessions, err := s.measurementHandler.GetAllSessions()
-//if err != nil {
-//log.Printf("Error getting sessions: %v", err)
-//return
-//}
-//var parts []string
-//for _, session := range sessions {
-//str := fmt.Sprintf("[%d, %s, %s, %s, %d]", session.Id, session.Name, session.StartTime, session.EndTime, session.Count)
-//parts = append(parts, str)
-//}
-//sessionsStr := strings.Join(parts, ", ")
-//if err != nil {
-//log.Printf("Error joining sessions: %v", err)
-//return
-//}
-//var clientPort string
-//var clientIp string
-//ip := conn.RemoteAddr().(*net.TCPAddr)
-//{
-//clientPort = strconv.Itoa(ip.Port)
-//clientIp = ip.IP.String()
-//log.Printf("Client IP: %s", clientIp)
-//log.Printf("Client Port: %s", clientPort)
-//}
-//err = s.measurementHandler.SendAllSessions(conn, sessionsStr)
-//if err != nil {
-//log.Printf("Error sending sessions to client: %v", err)
-//return
-//}
-//}()
-//} else if strings.HasPrefix(message, "ADD_SESSION") {
-//msg := strings.TrimPrefix(message, "ADD_SESSION: ")
-//session, err := handlers.ParseSession(msg)
-//if err != nil {
-//log.Printf("Error parsing session: %v", err)
-//return err
-//}
-//err = s.measurementHandler.SaveSession(session)
-//if err != nil {
-//log.Printf("Error saving session: %v", err)
-//return err
-//}
-//log.Printf("Session saved: %v", session)
-//
-//} else if strings.HasPrefix(message, "REMOVE_SESSION") {
-//sessionId, err := handlers.ParseRemoveSessionMessage(message)
-//if err != nil {
-//log.Printf("Error parsing remove session message: %v", err)
-//return err
-//}
-//err = s.measurementHandler.RemoveSession(int32(sessionId))
-//if err != nil {
-//log.Printf("Error removing session: %v", err)
-//return err
-//}
-//log.Printf("Session removed: %v", sessionId)
-//} else {
-//log.Printf("Error processing message, no such command: %v", message)
 //}
