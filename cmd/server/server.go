@@ -99,8 +99,6 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				s.updateClientInteraction(id)
 			} else {
 				log.Printf("Error branch for SSM")
-				s.waitListMutex.Lock()
-				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.SetSettingsMessage{})
@@ -121,8 +119,6 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				s.updateClientInteraction(id)
 			} else {
 				log.Printf("im in error branch in SMM u fucker")
-				s.waitListMutex.Lock()
-				defer s.waitListMutex.Unlock()
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.StartMeasurementMessage{})
