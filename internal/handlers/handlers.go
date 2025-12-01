@@ -185,7 +185,7 @@ func (m GetMeasurementSessionsMessage) Type() string { return "GET_MEASUREMENT_S
 func (m AddSessionMessage) Type() string             { return "ADD_SESSION" }
 func (m RemoveSessionMessage) Type() string          { return "REMOVE_SESSION" }
 func (m UnknownMessage) Type() string                { return "UNKNOWN" }
-func (m EspMessage) Type() string                    { return "ESP" }
+func (m EspMessage) Type() string                    { return "ESP_IDENTIFY" }
 func (m InitialEspConnectionMessage) Type() string   { return "INITIAL_ESP_CONNECTION" }
 
 type GetMessage struct {

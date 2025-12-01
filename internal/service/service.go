@@ -76,7 +76,7 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 func (s *DataService) StartProcessing() {
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
-	go s.processPendingMessages()
+	go s.startPendingProcessing()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -190,6 +190,11 @@ func (s *DataService) handleESPData(data string) {
 	}
 	if strings.HasPrefix(data, "ERROR") {
 		log.Printf("ESP Error: %s", data)
+		return
+	}
+	if strings.HasPrefix(data, "IDENTIFY") {
+		s.espConnector.SetConnected(true)
+		s.onEspConnected()
 		return
 	}
 
@@ -459,7 +464,7 @@ func (s *DataService) onEspConnected() {
 	s.processPendingMessages()
 }
 
-func (s *DataService) StartPendingProcessing() {
+func (s *DataService) startPendingProcessing() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
