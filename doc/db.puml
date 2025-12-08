@@ -1,18 +1,27 @@
 @startuml title DB interactions: packet lifecycle -> persistence actor Main actor ESPDevice participant "ESPConnector" as ESPConnector participant "DataService" as DataService participant "PacketParser" as Parser participant "PostgresRepo (Repo)" as Repo participant "processPackets goroutine" as Processor participant "DrainDataChannel goroutine" as Drain participant Client
 
-Main -> Repo: NewPostgresDB(config) Repo -> Repo: sql.Open / Ping (with retries) Repo --> Main: db connection
+Main -> Repo: NewPostgresDB(config)
+Repo -> Repo: sql.Open / Ping (with retries)
+Repo --> Main: db connection
 
 ESPDevice -> ESPConnector: send packet (text)
 ESPConnector -> DataService: handleESPData(data)
-DataService -> Parser: ParsePacketData(data) alt parse success
-DataService -> DataService: non-blocking send packetChan <- packet alt channel NOT full note right: processor goroutine reads from packetChan
+DataService -> Parser: ParsePacketData(data)
+alt parse success
+DataService -> DataService: non-blocking send packetChan <- packet
+alt channel NOT full
+note right: processor goroutine reads from packetChan
 Processor -> Repo: Save(packet, sessionId)
 Repo --> Processor: ok / error
-Processor -> Client: SendPacketToClient(packet) else channel FULL
+Processor -> Client: SendPacketToClient(packet)
+else channel FULL
 DataService -> Repo: Save(packet, sessionId) // immediate fallback
 Repo --> DataService: ok / error
-DataService -> Drain: start DrainDataChannel() // background drain of channel Drain -> Repo: Save(packet_from_channel)
-Repo --> Drain: ok / error end else parse error
+DataService -> Drain: start DrainDataChannel() // background drain of channel
+Drain -> Repo: Save(packet_from_channel)
+Repo --> Drain: ok / error
+end else parse error
 Parser --> DataService: error
-DataService -> Main: log parse error end
+DataService -> Main: log parse error
+end
 @enduml

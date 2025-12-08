@@ -10,8 +10,10 @@ ESPDevice -> ESPConnector: emits measurement packets -> (follow ESP packet proce
 
 Client -> Server: "GET_MEASUREMENT[:id]"
 Server -> Handler: parse
-Handler -> DataService: GetMeasurements(requestID) alt requestID == 0
-DataService -> Repo: FindLastRequestId() -> requestID end
+Handler -> DataService: GetMeasurements(requestID)
+alt requestID == 0
+DataService -> Repo: FindLastRequestId() -> requestID
+end
 DataService -> Repo: FindById(requestID)
 Repo --> DataService: []Packet
 DataService -> Server: SendMeasurementsToClient(conn, json)

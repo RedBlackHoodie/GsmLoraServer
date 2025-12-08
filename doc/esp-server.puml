@@ -2,12 +2,17 @@
 
 ESPDevice -> ESPConnector: send packet (text)
 ESPConnector -> DataService: handleESPData(data)
-DataService -> Parser: ParsePacketData(data) : models.Packet alt parse success
-DataService -> DataService: enqueue packetChan <- packet (non-blocking) alt channel full
+DataService -> Parser: ParsePacketData(data) : models.Packet
+alt parse success
+DataService -> DataService: enqueue packetChan <- packet (non-blocking)
+alt channel full
 DataService -> Repo: Save(packet, sessionId) // fallback saving
-DataService -> DataService: start DrainDataChannel() // drain in background end
+DataService -> DataService: start DrainDataChannel() // drain in background
+end
 Note right: processPackets goroutine reads from packetChan
 DataService -> Repo: Save(packet, sessionId) // persisted by processor
-DataService -> Client: SendPacketToClient(packet) // forward to client if present else parse error
-Parser --> DataService: error end
+DataService -> Client: SendPacketToClient(packet) // forward to client if present
+else parse error
+Parser --> DataService: error
+end
 @enduml

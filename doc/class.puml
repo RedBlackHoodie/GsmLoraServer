@@ -1,79 +1,168 @@
 @startuml
-title Core classes and relationships
+title Core classes and relationships (extended with methods)
+
+package models {
+  class Packet {
+    + RequestId : int
+    + RSSI : int
+    + SNRL : float64
+    + Coordinate : Coordinate
+    + Hdop : float32
+    + Timestamp : string
+  }
+
+  class Params {
+    + Bandwidth : float32
+    + Sf : float32
+    + Tx : float32
+  }
+
+  class Session {
+    + Id : int
+    + Name : string
+    + StartTime : string
+    + EndTime : string
+    + Count : int
+  }
+}
 
 class DataService {
-  + packetChan chan *Packet
-  + interfaceSettingsChange chan *Params
-  + PendingMessages chan *PendingMessage
-  + clients map[net.Conn]Destination
-  + espConnector *ESPConnector
-  + Repo Repository
+  - packetChan : chan *models.Packet
+  - Repo : *postgres.Repo
+  - interfaceSettingsChange : chan *models.Params
+  - mu : sync.RWMutex
+  - isProcessing : bool
+  - espConnector : *esp.ESPConnector
+  - clients : map[net.Conn]models.Destination
+  - PendingMessages : map[reflect.Type]*PendingMessage
+  - pendingMessagesLock : sync.RWMutex
+
+  + NewDataService(connector *esp.ESPConnector) : *DataService
+  + EspInitializer(connector esp.Connector) : error
   + StartProcessing()
-  + EspInitializer()
-  + ProcessPacketData(string) error
-  + ProcessInterfaceSettingChange(conn, string) error
+  + GetChannelStatus() : (int, int)
+  + GetChannelUsage() : float64
+  + GetPacketChannel() : <-chan *models.Packet
+  + ProcessPacketData(buffer string) : error
+  + DrainDataChannel() : error
+  + ProcessInterfaceSettingChange(conn net.Conn, message string) : error
+  + handleESPData(data string)
+  + processPackets()
+  + processPendingMessages()
+  + processInterfaceSettingsChange()
+  + GetMeasurements(requestID int) : ([]models.Packet, error)
+  + SendMeasurementCommand(conn net.Conn, command string, sessionId int) : error
+  + SendMeasurementsToClient(conn net.Conn, data string) : error
+  + SendAllSessions(conn net.Conn, data string) : error
+  + GetAllSessions() : ([]models.Session, error)
+  + SaveSession(session models.Session) : error
+  + RemoveSession(sessionId int) : error
+  + AddClient(conn net.Conn, destination models.Destination)
+  + SendPacketToClient(conn net.Conn, packet models.Packet)
+  + FindClientConnection() : (net.Conn, bool)
+  + FindEspConnection() : (net.Conn, bool)
+  + AddPendingMessage(message string, destination models.Destination, messageType core.Message)
+  + onEspConnected()
+  + startPendingProcessing()
 }
 
 class ESPConnector {
-  + IP string
-  + Port string
-  + Conn net.Conn
-  + isConnected bool
-  + Connect(ip, port) error
-  + ListeningStart(callback func(string)) error
-  + MaintainConnection(ip, port, callback func(string))
-  + SendParamsToDevice(params Params) error
+  - IP : string
+  - Port : string
+  - Conn : net.Conn
+  - isConnected : bool
+  - mutex : sync.RWMutex
+  - CurrentSession : int
+
+  + NewESPConnector() : *ESPConnector
+  + GetIP() : string
+  + GetPort() : string
+  + GetConn() : net.Conn
+  + SetIP(ip string)
+  + SetPort(port string)
+  + SetConn(conn net.Conn)
+  + SetConnected(connected bool)
+  + SetCurrentSession(session int)
+  + Connect(ip, port string) : error
+  + SendCommand(command string, sessionId int) : error
+  + SendParamsToDevice(params models.Params) : error
+  + ProcessInterfaceSettingChange(message string) : error
+  + IsConnected() : bool
+  + Close() : error
+  + MaintainConnection(ip, port string, dataHandler func(string))
+  + ListeningStart(dataHandler func(string)) : error
 }
 
 interface Repository {
-  + FindById(ctx, id) ([]Packet, error)
-  + Save(packet *Packet, sessionId int) error
-  + SaveSession(session Session) error
-  + RemoveSession(sessionId int) error
-  + GetAllSessions() ([]Session, error)
-  + FindLastRequestId() (int, error)
+  + FindById(ctx context.Context, id int) : (interface{}, error)
 }
 
 class PostgresRepo {
-  - db *sql.DB
-  + CreatePacketsTable()
-  + CreateSessionsTable()
-  + Save(packet *Packet, sessionId int) error
-  + SaveSession(session Session) error
+  - db : *sql.DB
+
+  + NewPostgresRepo(db *sql.DB) : *Repo
+  + NewPostgresDB(config configs.Config) : (*sql.DB, error)
+  + InitTables() : (error, error)
+  + CreatePacketsTable() : error
+  + CreateSessionsTable() : error
+  + Save(packet *models.Packet, sessionId int) : error
+  + SaveSession(session models.Session) : error
+  + RemoveSession(sessionId int) : error
+  + GetAllSessions() : ([]models.Session, error)
+  + FindById(requestId int) : ([]models.Packet, error)
+  + FindLastRequestId() : (int, error)
+  + FindLastSessionId() : (int, error)
 }
 
-class Packet {
-  + RequestId int
-  + RSSI int
-  + SNRL float64
-  + Coordinate Coordinate
-  + Hdop float32
-  + Timestamp string
-}
-
-class Params {
-  + Sf float32
-  + Tx float32
-  + Bandwidth float32
-}
-
-class Session {
-  + Id int
-  + Name string
-  + StartTime string
-  + EndTime string
-  + Count int
-}
+note right of PostgresRepo
+  PostgresRepo represents the concrete DB repo.
+end note
 
 class Server {
-  + StartServer(port string) error
-  + AddClient(conn net.Conn)
+  - clients : map[string]*Client
+  - mutex : sync.RWMutex
+  - measurementHandler : core.MeasurementHandler
+  - connector : esp.Connector
+  - waitList : []net.Conn
+  - waitListMutex : sync.RWMutex
+
+  + NewServer(h core.MeasurementHandler, connector esp.Connector) : *Server
+  + StartServer(port string) : error
+  + HandleConnection(conn net.Conn) : error
+  + registerClient(clientId string, conn net.Conn)
+  + unregisterClient(deviceID string)
+  + waitForEspConnection(conn net.Conn) : error
+  + addWaitingClient(conn net.Conn)
+  + removeWaitingClient(conn net.Conn)
+  + removeAllWaitingClients()
+  + notifyWaitingClients()
+  + updateClientInteraction(clientID string)
+  + deleteAllClients()
+  + HandleSetSettings(conn net.Conn, message string)
+  + handleStartMeasurement(conn net.Conn, sessionId int)
+  + HandleGetMeasurementSessions(conn net.Conn)
+  + HandleAddSession(conn net.Conn, session models.Session)
+  + HandleRemoveSession(conn net.Conn, sessionId int)
+  + HandleEspConnection(conn net.Conn)
 }
 
+class Client {
+  - conn : net.Conn
+  - device : string
+  - lastInteraction : string
+  - isActive : bool
+  - mutex : sync.RWMutex
+
+  + setInactive()
+  + isConnectionAlive() : bool
+}
+
+' Relationships
 DataService o-- ESPConnector
 DataService o-- Repository
 PostgresRepo ..|> Repository
 Server --> DataService
+Server --> ESPConnector
 ESPConnector --> Packet : produces
 PostgresRepo --> Packet : persists
 @enduml
