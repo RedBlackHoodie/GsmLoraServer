@@ -1,0 +1,79 @@
+@startuml
+title Core classes and relationships
+
+class DataService {
+  + packetChan chan *Packet
+  + interfaceSettingsChange chan *Params
+  + PendingMessages chan *PendingMessage
+  + clients map[net.Conn]Destination
+  + espConnector *ESPConnector
+  + Repo Repository
+  + StartProcessing()
+  + EspInitializer()
+  + ProcessPacketData(string) error
+  + ProcessInterfaceSettingChange(conn, string) error
+}
+
+class ESPConnector {
+  + IP string
+  + Port string
+  + Conn net.Conn
+  + isConnected bool
+  + Connect(ip, port) error
+  + ListeningStart(callback func(string)) error
+  + MaintainConnection(ip, port, callback func(string))
+  + SendParamsToDevice(params Params) error
+}
+
+interface Repository {
+  + FindById(ctx, id) ([]Packet, error)
+  + Save(packet *Packet, sessionId int) error
+  + SaveSession(session Session) error
+  + RemoveSession(sessionId int) error
+  + GetAllSessions() ([]Session, error)
+  + FindLastRequestId() (int, error)
+}
+
+class PostgresRepo {
+  - db *sql.DB
+  + CreatePacketsTable()
+  + CreateSessionsTable()
+  + Save(packet *Packet, sessionId int) error
+  + SaveSession(session Session) error
+}
+
+class Packet {
+  + RequestId int
+  + RSSI int
+  + SNRL float64
+  + Coordinate Coordinate
+  + Hdop float32
+  + Timestamp string
+}
+
+class Params {
+  + Sf float32
+  + Tx float32
+  + Bandwidth float32
+}
+
+class Session {
+  + Id int
+  + Name string
+  + StartTime string
+  + EndTime string
+  + Count int
+}
+
+class Server {
+  + StartServer(port string) error
+  + AddClient(conn net.Conn)
+}
+
+DataService o-- ESPConnector
+DataService o-- Repository
+PostgresRepo ..|> Repository
+Server --> DataService
+ESPConnector --> Packet : produces
+PostgresRepo --> Packet : persists
+@enduml

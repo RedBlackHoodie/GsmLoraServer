@@ -16,7 +16,17 @@ var (
 	buildTime = time.Now().String()
 )
 
+//var regeneratePuml = (version == "dev")
+
 func main() {
+	//if regeneratePuml {
+	//	fmt.Println("PlantUML generation start")
+	//	err := utils.GeneratePuml("esp-server.puml")
+	//	if err != nil {
+	//		log.Printf("failed to generate puml: %v", err)
+	//	}
+	//	fmt.Println("PlantUML generation end")
+	//}
 	log.Printf("Lora ESP GSM GPS Project v.%s (built %s)\n", version, buildTime)
 	logFile, err := os.OpenFile("app.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
