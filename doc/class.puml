@@ -1,5 +1,5 @@
 @startuml
-title Core classes and relationships (extended with methods)
+title Core classes and relationships
 
 package models {
   class Packet {
@@ -115,7 +115,7 @@ class PostgresRepo {
 }
 
 note right of PostgresRepo
-  PostgresRepo represents the concrete DB repo.
+  PostgresRepo represents the concrete DB.
 end note
 
 class Server {

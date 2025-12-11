@@ -1,6 +1,6 @@
 @startuml title Server request handling & processing (sequence)
 
-actor UserClient
+actor User
 participant ESPDevice
 participant Server
 participant Handlers
@@ -11,7 +11,8 @@ participant "ClientConn\n(receiver)" as ClientConn
 
 
 == Client -> Server: send command (SET_SETTINGS / START_MEASUREMENT / GET_MEASUREMENT_SESSIONS / ADD_SESSION / REMOVE_SESSION) ==
-UserClient -> Server : "LINE\n(e.g. SET_SETTINGS: SF=7, TX=10, BW=125)" activate Server
+User -> Server : "LINE\n(e.g. SET_SETTINGS: SF=7, TX=10, BW=125)"
+activate Server
 
 Server -> Handlers : ParseClientMessage(message)
 activate Handlers
@@ -29,7 +30,7 @@ alt message == SET_SETTINGS
         Server -> Server : HandleSetSettings(conn, message)
         Server -> DataService : ProcessInterfaceSettingChange(conn, message)
         activate DataService
-        DataService -> DataService : parse params, s.interfaceSettingsChange <- &params
+        DataService -> DataService : parse params and enqueue
         deactivate DataService
 
         note over DataService: asynchronous processing continues\nin processInterfaceSettingsChange goroutine
@@ -65,10 +66,12 @@ alt message == GET_MEASUREMENT_SESSIONS
     activate PostgresRepo
     PostgresRepo --> DataService : []Session
     deactivate PostgresRepo
-    DataService --> Server : []Session deactivate DataService
+    DataService --> Server : []Session
+    deactivate DataService
     Server -> DataService : SendAllSessions(conn, sessionsStr)
     activate DataService
-    DataService -> Server : write response to conn deactivate DataService
+    DataService -> Server : write response to conn
+    deactivate DataService
 end
 
 alt message == ADD_SESSION / REMOVE_SESSION
@@ -84,13 +87,13 @@ end
 
 deactivate Server
 
-== ESP IDENTIFY / ESP connects ==
+== ESP IDENTIFY / ESP connection ==
 ESPDevice -> Server : "IDENTIFY"
 activate Server
 Server -> ESPConnector : SetConnected(true); SetIP(...); SetConn(conn)
 Server -> DataService : EspInitializer(espConnector)
 activate DataService
-DataService -> ESPConnector : (uses connector) Start ListeningStart(dataHandler) // goroutine
+DataService -> ESPConnector : Start ListeningStart(dataHandler) // goroutine
 DataService -> ESPConnector : MaintainConnection(ip, port, dataHandler) // goroutine
 deactivate DataService
 Server --> ESPDevice : "OK\n"
@@ -99,11 +102,11 @@ deactivate Server
 == ESP sends measurement data ==
 ESPDevice -> ESPConnector : "MEASUREMENT: {...}\n"
 activate ESPConnector
-ESPConnector -> DataService : dataHandler(message) // calls DataService.handleESPData
+ESPConnector -> DataService : dataHandler(message)
 deactivate ESPConnector
 
 activate DataService
-DataService -> DataService : ProcessPacketData(buffer) // parse -> packet
+DataService -> DataService : ProcessPacketData(buffer) // parse packet
 DataService -> DataService : try push to packetChan (non-blocking)
 alt channel full
 DataService -> PostgresRepo : Save(packet, currentSession) // store directly
@@ -111,13 +114,19 @@ activate PostgresRepo
 PostgresRepo --> DataService : success
 deactivate PostgresRepo
 DataService -> DataService : Spawn DrainDataChannel() goroutine
-else channel accepted note right: packet stored in channel for processing
+loop for each packet in channel:
+DataService -> PostgresRepo: Save(packet, currentSession)
+end loop
+
+else channel not full
+DataService -> DataService: enqueue packet
+note right: packet stored in channel for processing
 end
 deactivate DataService
 
 == Packet processing goroutine ==
 activate DataService
-DataService -> PostgresRepo : Save(packet, currentSession) // from processPackets
+DataService -> PostgresRepo : Save(packet, currentSession)
 loop activate PostgresRepo
 PostgresRepo --> DataService : success / error
 deactivate PostgresRepo
@@ -126,7 +135,7 @@ DataService -> DataService : FindClientConnection() -> clientConn
 alt clientConn found
 DataService -> ClientConn : SendPacketToClient(clientConn, packet)
 activate ClientConn
-ClientConn --> UserClient : "MEASUREMENT: [...]" (TCP write)
+ClientConn --> User : "MEASUREMENT: [...]"
 deactivate ClientConn
 else no client found
 DataService -> DataService : AddPendingMessage(packet, models.Client, handlers.IncomingMeasurementMessage{})

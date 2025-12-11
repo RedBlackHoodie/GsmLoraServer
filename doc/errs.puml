@@ -1,4 +1,14 @@
-@startuml title Error handling: DB, parsing, channel fallback, device write errors actor Main participant "PostgresRepo" as Repo participant "DataService" as DataService participant "PacketParser" as Parser participant "ESPConnector" as ESPConnector participant "processPackets goroutine" as Processor participant "DrainDataChannel goroutine" as Drain participant Logger
+@startuml
+title Error handling: DB, parsing, channel fallback, device write errors
+
+actor Main
+participant "PostgresRepo" as Repo
+participant "DataService" as DataService
+participant "PacketParser" as Parser
+participant "ESPConnector" as ESPConnector
+participant "processPackets goroutine" as Processor
+participant "DrainDataChannel goroutine" as Drain
+participant Logger
 
 Main -> Repo: NewPostgresDB(config)
 Repo -> Repo: Open & Ping (attempt 1..5)
@@ -7,7 +17,7 @@ Repo --> Main: db object
 else ping fails after retries
 Repo --> Main: error("failed to connect after 5 attempts")
 Main -> Logger: log.Println("Error connecting to database")
-Main -> Main: exit / return (app stops)
+Main -> Main: exit / return
 end
 
 ESPConnector -> DataService: handleESPData(data)
@@ -16,7 +26,7 @@ alt parse error
 Parser --> DataService: error
 DataService -> Logger: log.Printf("Unexpected error while parsing packet") stop
 else parsed packet
-DataService -> DataService: try enqueue packetChan
+DataService -> DataService: try enqueue packet
 alt enqueue succeeds
 Processor -> Repo: Save(packet, sessionId)
 alt Save error

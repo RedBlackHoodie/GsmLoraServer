@@ -1,4 +1,10 @@
-@startuml title Client SET_SETTINGS flow actor Client participant "Server (net layer)" as Server participant "MessageHandler" as Handler participant "DataService" as DataService participant "ESPConnector" as ESPConnector participant "ClientConn" as ClientConn
+@startuml title Client SET_SETTINGS flow
+actor Client
+participant "Server (net layer)" as Server
+participant "MessageHandler" as Handler
+participant "DataService" as DataService
+participant "ESPConnector" as ESPConnector
+participant "ClientConn" as ClientConn
 
 Client -> Server: TCP: "SET_SETTINGS: SF=..., TX=..., BW=..."
 Server -> Handler: parse -> SetSettingsMessage
