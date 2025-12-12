@@ -1,4 +1,5 @@
-@startuml title Start/Stop measurement
+@startuml
+title Start/Stop measurement
 actor Client
 participant "Server" as Server
 participant "Handler" as Handler

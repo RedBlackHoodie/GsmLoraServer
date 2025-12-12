@@ -1,4 +1,5 @@
-@startuml title Server request handling & processing (sequence)
+@startuml
+title Server request handling & processing (sequence)
 
 actor User
 participant ESPDevice
