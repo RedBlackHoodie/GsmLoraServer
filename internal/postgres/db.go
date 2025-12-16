@@ -62,7 +62,7 @@ func NewPostgresDB(config configs.Config) (*sql.DB, error) {
 }
 
 func (r *Repo) InitTables() (error, error) {
-	return r.CreatePacketsTable(), r.CreateSessionsTable()
+	return r.CreateSessionsTable(), r.CreatePacketsTable()
 }
 
 func (r *Repo) CreatePacketsTable() error {

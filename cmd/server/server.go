@@ -118,7 +118,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				s.registerClient(id, conn)
 				s.updateClientInteraction(id)
 			} else {
-				log.Printf("im in error branch in SMM u fucker")
+				log.Printf("Error branch in SMM")
 				s.addWaitingClient(conn)
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.StartMeasurementMessage{})

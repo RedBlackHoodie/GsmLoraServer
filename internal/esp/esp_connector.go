@@ -257,22 +257,27 @@ func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(stri
 }
 
 func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
-	reader := bufio.NewReader(e.Conn)
+	scanner := bufio.NewScanner(e.Conn)
 	log.Printf("Listening on ESP32...")
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			e.mutex.Lock()
-			e.isConnected = false
-			e.Conn = nil
-			e.mutex.Unlock()
-			log.Printf("error reading from ESP32: %v", err)
-			return err
-		}
+	for scanner.Scan() {
+		message := scanner.Text()
+		//if err != nil {
+		//	e.mutex.Lock()
+		//	e.isConnected = false
+		//	e.Conn = nil
+		//	e.mutex.Unlock()
+		//	log.Printf("error reading from ESP32: %v", err)
+		//	return err
+		//}
 		if message == "" {
 			continue
 		}
 		log.Printf("Received message from ESP32: %s", message)
 		dataHandler(message)
 	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading:", err.Error())
+		return err
+	}
+	return nil
 }
