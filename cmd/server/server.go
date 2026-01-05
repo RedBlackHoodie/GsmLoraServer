@@ -375,10 +375,6 @@ func (s *Server) HandleEspConnection(conn net.Conn) {
 	}
 	log.Printf("Connection from esp: %v", conn.RemoteAddr().String())
 	log.Printf("ESP_OK")
-	_, err = conn.Write([]byte("OK\n"))
-	if err != nil {
-		return
-	}
 }
 
 func (c *Client) setInactive() {
