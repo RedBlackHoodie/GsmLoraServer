@@ -101,9 +101,6 @@ func NewESPConnector() *ESPConnector {
 func (e *ESPConnector) Connect(ip, port string) error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-
-	//address := fmt.Sprintf("%s:%s", ip, port)
-
 	maxAttempts := 3
 	retryDelay := 5 * time.Second
 	var err error
@@ -237,21 +234,16 @@ func (e *ESPConnector) Close() error {
 	return nil
 }
 
-func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(string)) {
+func (e *ESPConnector) MaintainConnection(dataHandler func(string)) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		if !e.IsConnected() {
 			log.Printf("Attempting to reConnect to ESP32...")
-			err := e.Connect(ip, port)
+			err := e.ListeningStart(dataHandler)
 			if err != nil {
-				log.Printf("Failed to reConnect to ESP32: %v", err)
-			} else {
-				err = e.ListeningStart(dataHandler)
-				if err != nil {
-					return
-				}
+				return
 			}
 		}
 	}
@@ -262,14 +254,6 @@ func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
 	log.Printf("Listening on ESP32...")
 	for scanner.Scan() {
 		message := scanner.Text()
-		//if err != nil {
-		//	e.mutex.Lock()
-		//	e.isConnected = false
-		//	e.Conn = nil
-		//	e.mutex.Unlock()
-		//	log.Printf("error reading from ESP32: %v", err)
-		//	return err
-		//}
 		if message == "" {
 			continue
 		}
