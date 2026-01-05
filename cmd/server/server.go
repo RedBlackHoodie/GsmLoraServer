@@ -301,7 +301,7 @@ func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		}
 	}()
 }
@@ -311,7 +311,7 @@ func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 		err := s.connector.SendCommand("START_MEASUREMENT", sessionId)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		}
 	}()
 }
@@ -348,7 +348,7 @@ func (s *Server) HandleAddSession(conn net.Conn, session models.Session) {
 	err := s.measurementHandler.SaveSession(session)
 	if err != nil {
 		log.Printf("Error saving session: %v", err)
-		conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+		//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		return
 	}
 	log.Printf("Session saved: %v", session)
@@ -358,7 +358,7 @@ func (s *Server) HandleRemoveSession(conn net.Conn, sessionId int) {
 	err := s.measurementHandler.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)
-		conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+		//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		return
 	}
 	log.Printf("Session removed: %v", sessionId)

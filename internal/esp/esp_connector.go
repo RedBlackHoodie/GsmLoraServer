@@ -102,37 +102,37 @@ func (e *ESPConnector) Connect(ip, port string) error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 
-	address := fmt.Sprintf("%s:%s", ip, port)
+	//address := fmt.Sprintf("%s:%s", ip, port)
 
 	maxAttempts := 3
 	retryDelay := 5 * time.Second
 	var err error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		log.Printf("Attempting to connect to ESP32 at %s (attempt %d/%d)", address, attempt, maxAttempts)
+		log.Printf("Attempting to connect to ESP32 at %s (attempt %d/%d)", ip, attempt, maxAttempts)
 
-		Conn, dialErr := net.Dial("tcp", address)
+		Conn, dialErr := net.Dial("tcp", ip)
 		if dialErr == nil {
 			e.IP = ip
 			e.Port = port
 			e.Conn = Conn
 			e.isConnected = true
 
-			log.Printf("Successfully connected to ESP32 at %s on attempt %d", address, attempt)
+			log.Printf("Successfully connected to ESP32 at %s on attempt %d", ip, attempt)
 			return nil
 		}
 
 		err = dialErr
 
 		if attempt < maxAttempts {
-			log.Printf("Connection attempt %d failed: %v. Retrying in %v...", attempt, dialErr, retryDelay)
+			log.Printf("Connection attempt %d failed: %v. Retrying in %v...", ip, dialErr, retryDelay)
 			time.Sleep(retryDelay)
 			retryDelay = time.Duration(float64(retryDelay) * 1.5)
 		}
 	}
 	e.Conn = nil
 	e.isConnected = false
-	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", address, maxAttempts, err)
+	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", ip, maxAttempts, err)
 }
 
 func (e *ESPConnector) SendCommand(command string, sessionId int) error {
@@ -231,6 +231,7 @@ func (e *ESPConnector) Close() error {
 		err := e.Conn.Close()
 		e.Conn = nil
 		e.isConnected = false
+		log.Printf("Closing connection with esp on teardown")
 		return err
 	}
 	return nil
