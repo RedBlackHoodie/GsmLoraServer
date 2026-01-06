@@ -140,13 +140,6 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 		log.Printf("not Connected to ESP32")
 		return errors.New("ESP_NOT_CONNECTED")
 	}
-	e.Conn.SetReadDeadline(time.Now().Add(1 * time.Millisecond))
-	var buf [1]byte
-	_, err := e.Conn.Read(buf[:])
-	if err == nil {
-		log.Println("Unexpected data in socket")
-	}
-	e.Conn.SetReadDeadline(time.Time{})
 	var message string
 	if sessionId == 0 {
 		message = command
@@ -154,9 +147,7 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 		e.CurrentSession = sessionId
 		message = fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
 	}
-	e.Conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
-	_, err = e.Conn.Write([]byte(message + "\n"))
-	e.Conn.SetWriteDeadline(time.Time{})
+	_, err := e.Conn.Write([]byte(message + "\n"))
 
 	if err != nil {
 		e.isConnected = false
@@ -267,6 +258,9 @@ func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
 		message := scanner.Text()
 		if message == "" {
 			continue
+		}
+		if strings.HasPrefix(message, "ACK") {
+			log.Printf("ACK: %s", message)
 		}
 		log.Printf("Received message from ESP32: %s", message)
 		dataHandler(message)
