@@ -1,0 +1,150 @@
+@startuml
+title DB interactions
+
+participant Main
+participant "Postgres package" as PostgresInit
+participant "PostgresRepo (Repo)" as Repo
+participant "sql.DB (DB)" as DB
+participant "processPackets goroutine" as Processor
+participant "DrainDataChannel goroutine" as Drain
+participant "DataService (caller)" as DataService
+participant Client
+
+' DB initialization and table creation
+Main -> PostgresInit: NewPostgresDB(config)
+activate PostgresInit
+PostgresInit -> DB: sql.Open("pgx", dsn)
+activate DB
+DB -> DB: db.Ping() (with 5 retries)
+
+alt cannot connect to db
+    DB -> Main: error
+    deactivate DB
+    deactivate PostgresInit
+    Main -> Main: exit
+else connection success
+    DB -> DB: db.SetMaxOpenConns / SetMaxIdleConns / SetConnMaxLifetime
+    DB --> PostgresInit: db connection
+    deactivate DB
+    PostgresInit --> Main: return db
+    deactivate PostgresInit
+end
+
+Main -> Repo: NewPostgresRepo(db)
+activate Repo
+Main -> Repo: InitTables()
+Repo -> DB: Exec "CREATE TABLE IF NOT EXISTS sessions (...)"
+activate DB
+DB --> Repo: ok / error
+deactivate DB
+Repo -> DB: Exec "CREATE TABLE IF NOT EXISTS packets (...)"
+activate DB
+DB --> Repo: ok / error
+deactivate DB
+Repo --> Main: InitTables ok / error
+deactivate Repo
+
+' Saving packets (normal processor path)
+Processor -> Repo: Save(packet, sessionId)
+activate Repo
+
+alt sessionId == 0
+    Repo -> DB: QueryRow "SELECT COALESCE(MAX(id),0) FROM sessions"
+    activate DB
+    DB --> Repo: lastSessionId / error
+    deactivate DB
+    Repo -> Repo: use lastSessionId
+end
+
+Repo -> DB: Exec "INSERT INTO packets (request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) VALUES (...)"
+activate DB
+DB --> Repo: ok / error
+deactivate DB
+Repo --> Processor: ok / error
+deactivate Repo
+
+' Saving packets (fallback when channel full)
+DataService -> Repo: Save(packet, sessionId) // immediate fallback
+activate Repo
+note right of Repo: same logic as Save above
+Repo --> DataService: ok / error
+deactivate Repo
+
+' Drain path: persist pending packets
+DataService -> Drain: DrainDataChannel()
+activate Drain
+loop for each buffered packet
+    Drain -> Repo: Save(packet)
+    activate Repo
+    Repo -> DB: Exec "INSERT INTO packets(...)"
+    activate DB
+    DB --> Repo: ok / error
+    deactivate DB
+    Repo --> Drain: ok / error
+    deactivate Repo
+end
+Drain --> DataService: drain completed
+deactivate Drain
+
+' Sessions management
+Client -> Repo: SaveSession(session)
+activate Repo
+Repo -> DB: Exec "INSERT INTO sessions (id, name, start_time, end_time, count) VALUES (...)"
+activate DB
+DB --> Repo: ok / error
+deactivate DB
+Repo --> Client: ok / error
+deactivate Repo
+
+Client -> Repo: RemoveSession(sessionId)
+activate Repo
+Repo -> DB: Exec "DELETE FROM sessions WHERE id = $1"
+activate DB
+DB --> Repo: ok / error
+deactivate DB
+Repo --> Client: ok / error
+deactivate Repo
+
+Client -> Repo: GetAllSessions()
+activate Repo
+Repo -> DB: Query "SELECT id, name, start_time, end_time, count FROM sessions"
+activate DB
+DB --> Repo: rows / error
+deactivate DB
+Repo -> Repo: rows.Scan(...) -> []Session
+Repo --> Client: sessions / ErrNotFound
+deactivate Repo
+
+Client -> Repo: FindById(requestId)
+activate Repo
+Repo -> DB: Query "SELECT request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1"
+activate DB
+DB --> Repo: rows / error
+deactivate DB
+Repo -> Repo: rows.Scan(...) -> []Packet
+Repo --> Client: packets / ErrNotFound
+deactivate Repo
+
+' Utility queries
+Repo -> DB: QueryRow "SELECT COALESCE(MAX(request_id),0) FROM packets"
+activate DB
+DB --> Repo: lastRequestId / error
+deactivate DB
+
+Repo -> DB: QueryRow "SELECT COALESCE(MAX(id),0) FROM sessions"
+activate DB
+DB --> Repo: lastSessionId / error
+deactivate DB
+
+' Shutdown
+Main -> DB: db.Close()
+activate DB
+DB --> Main: closed / error
+deactivate DB
+
+note left
+Repo methods use DB.Exec, DB.Query, DB.QueryRow.
+Repo returns ErrNotFound when no rows found.
+Errors are propagated back to callers.
+end note
+@enduml

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/esp"
 	"Lora_Esp_Gsm_Gps_project/internal/handlers"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
@@ -10,14 +11,18 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 type PendingMessage struct {
 	Destination models.Destination
+	Type        handlers.Message
 	Message     string
+	Timestamp   time.Time
 }
 
 type DataService struct {
@@ -28,7 +33,7 @@ type DataService struct {
 	isProcessing            bool
 	espConnector            *esp.ESPConnector
 	clients                 map[net.Conn]models.Destination
-	PendingMessages         chan *PendingMessage
+	PendingMessages         map[reflect.Type]*PendingMessage
 	pendingMessagesLock     sync.RWMutex
 }
 
@@ -39,31 +44,35 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 		interfaceSettingsChange: make(chan *models.Params, 10),
 		espConnector:            connector,
 		clients:                 make(map[net.Conn]models.Destination, 10),
-		PendingMessages:         make(chan *PendingMessage, 20),
+		PendingMessages:         make(map[reflect.Type]*PendingMessage, 5),
 	}
 	return service
 }
 
-func (s *DataService) EspInitializer() {
-	err := s.espConnector.Connect(s.espConnector.IP, s.espConnector.Port)
-	if err != nil {
-		log.Printf("Error connecting to ESP: %v", err)
-		return
+func (s *DataService) EspInitializer(connector esp.Connector) error {
+	s.espConnector = connector.(*esp.ESPConnector)
+	if s.espConnector == nil {
+		return errors.New("esp connector is nilptr")
+	}
+	if !s.espConnector.IsConnected() {
+		log.Printf("esp is not connected while initializing service")
+		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go func() {
-		err = s.espConnector.ListeningStart(s.handleESPData)
+		err := s.espConnector.ListeningStart(s.handleESPData)
 		if err != nil {
 			log.Printf("Error starting listening: %v", err)
 		}
 	}()
-	go s.espConnector.MaintainConnection(s.espConnector.IP, s.espConnector.Port, s.handleESPData)
+	go s.espConnector.MaintainConnection(s.handleESPData)
+	return nil
 }
 
 func (s *DataService) StartProcessing() {
 	go s.processPackets()
 	go s.processInterfaceSettingsChange()
-	go s.processPendingMessages()
+	go s.startPendingProcessing()
 }
 
 func (s *DataService) GetChannelStatus() (int, int) {
@@ -128,11 +137,9 @@ func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message strin
 	s.clients[conn] = models.Client
 
 	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_NOT_CONNECTED"}
 		return errors.New("ESP_NOT_CONNECTED")
-	} else {
-		s.PendingMessages <- &PendingMessage{Destination: models.Client, Message: "ESP_CONNECTED"}
 	}
+
 	params := models.Params{}
 
 	for _, part := range parts {
@@ -181,6 +188,11 @@ func (s *DataService) handleESPData(data string) {
 		log.Printf("ESP Error: %s", data)
 		return
 	}
+	if strings.HasPrefix(data, "IDENTIFY") {
+		s.espConnector.SetConnected(true)
+		s.onEspConnected()
+		return
+	}
 
 	err := s.ProcessPacketData(data)
 	if err != nil {
@@ -211,29 +223,47 @@ func (s *DataService) processPackets() {
 func (s *DataService) processPendingMessages() {
 	s.pendingMessagesLock.Lock()
 	defer s.pendingMessagesLock.Unlock()
-	for pending := range s.PendingMessages {
-		switch pending.Destination {
-		case models.Lora:
-			if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-				log.Printf("ESP_CONNECTION UNAVAILABLE")
+	for _, pending := range s.PendingMessages {
+		switch pending.Type {
+		case handlers.SetSettingsMessage{}:
+			if s.espConnector.IsConnected() {
+				conn, exist := s.FindEspConnection()
+				if !exist {
+					log.Printf("NO_ESP_CONNECTION FOUND")
+				}
+				err := s.ProcessInterfaceSettingChange(conn, pending.Message)
+				if err != nil {
+					log.Printf("Error processing pending settings change: %v", err)
+				}
+				log.Printf("Pending settings processed successfully")
+			} else {
+				log.Printf("ESP not connected, skipping pending settings")
 				continue
 			}
-			err := s.SendMeasurementCommand(s.espConnector.Conn, pending.Message, s.espConnector.CurrentSession)
-			if err != nil {
-				log.Printf("Error sending message to ESP: %v", err)
-			}
-		case models.Client:
-			clientConn, exists := s.FindClientConnection()
-			if !exists {
-				log.Printf("No client connection found")
+		case handlers.StartMeasurementMessage{}:
+			if s.espConnector.IsConnected() {
+				conn, exist := s.FindEspConnection()
+				if !exist {
+					log.Printf("NO_ESP_CONNECTION FOUND")
+				}
+				msg, err := handlers.ParseClientMessage(s, pending.Message)
+
+				if err != nil {
+					log.Printf("Error parsing client message: %v", err)
+				}
+				switch m := msg.(type) {
+				case handlers.StartMeasurementMessage:
+					err = s.SendMeasurementCommand(conn, "START_MEASUREMENT", m.SessionId)
+					if err != nil {
+						log.Printf("Error processing pending settings change: %v", err)
+					}
+				}
+				log.Printf("Pending settings processed successfully")
+			} else {
 				continue
-			}
-			err := s.SendMeasurementsToClient(clientConn, pending.Message)
-			if err != nil {
-				log.Printf("Error sending message to client: %v", err)
 			}
 		default:
-			log.Printf("Unknown destination: %v", pending.Destination)
+			log.Printf("Unexpected pending message type: %s", pending.Type)
 		}
 	}
 }
@@ -392,4 +422,56 @@ func (s *DataService) FindClientConnection() (net.Conn, bool) {
 		}
 	}
 	return clientConn, clientConn != nil
+}
+
+func (s *DataService) FindEspConnection() (net.Conn, bool) {
+	var espConn net.Conn
+	for conn, dest := range s.clients {
+		if dest == models.Lora {
+			espConn = conn
+		}
+	}
+	return espConn, espConn != nil
+}
+
+func (s *DataService) AddPendingMessage(message string, destination models.Destination, messageType core.Message) {
+	s.pendingMessagesLock.Lock()
+	defer s.pendingMessagesLock.Unlock()
+
+	msg := &PendingMessage{
+		Destination: destination,
+		Type:        messageType,
+		Message:     message,
+		Timestamp:   time.Now(),
+	}
+
+	msgType := reflect.TypeOf(messageType)
+
+	if existing, exists := s.PendingMessages[msgType]; !exists ||
+		msg.Timestamp.After(existing.Timestamp) {
+		s.PendingMessages[msgType] = msg
+		log.Printf("Added new pending message: %v", msg)
+	}
+	log.Printf("Havent added pending message: %v", msg)
+}
+
+func (s *DataService) onEspConnected() {
+	log.Printf("ESP connected, processing pending messages")
+	s.processPendingMessages()
+}
+
+func (s *DataService) startPendingProcessing() {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if s.espConnector.IsConnected() {
+				s.pendingMessagesLock.Lock()
+				s.onEspConnected()
+				s.pendingMessagesLock.Unlock()
+			}
+		}
+	}
 }

@@ -85,7 +85,6 @@ func getNetworkInterface() (*net.Interface, *net.IPNet, error) {
 }
 
 func activeNetworkScan(iface *net.Interface, ipNet *net.IPNet, targetMAC string) (string, error) {
-	//targetMAC = normalizeMAC(targetMAC)
 
 	_, err := getIPsFromNetwork(ipNet)
 	if err != nil {
@@ -141,9 +140,6 @@ func parseArpScanOutput(output, targetMAC string) (string, error) {
 
 		if net.ParseIP(parts[0]) != nil {
 			mac := parts[1]
-			//if normalizeMAC(mac) == targetMAC {
-			//	return parts[0], nil
-			//}
 			if mac == targetMAC {
 				return parts[0], nil
 			}
@@ -154,8 +150,6 @@ func parseArpScanOutput(output, targetMAC string) (string, error) {
 }
 
 func scanARPTable(targetMAC string) (string, error) {
-
-	//targetMAC = normalizeMAC(targetMAC)
 
 	file, err := os.Open("/proc/net/arp")
 	if err != nil {
@@ -176,9 +170,6 @@ func scanARPTable(targetMAC string) (string, error) {
 		ip := fields[0]
 		mac := fields[3]
 
-		//if normalizeMAC(mac) == targetMAC {
-		//	return ip, nil
-		//}
 		if mac == targetMAC {
 			return ip, nil
 		}

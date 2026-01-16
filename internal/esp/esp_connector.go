@@ -3,6 +3,7 @@ package esp
 import (
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"bufio"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -44,6 +45,53 @@ type GetMessage struct {
 	What string
 }
 
+func (e *ESPConnector) GetIP() string {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.IP
+}
+
+func (e *ESPConnector) GetPort() string {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.Port
+}
+
+func (e *ESPConnector) GetConn() net.Conn {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	return e.Conn
+}
+func (e *ESPConnector) SetIP(ip string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.IP = ip
+}
+
+func (e *ESPConnector) SetPort(port string) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.Port = port
+}
+
+func (e *ESPConnector) SetConn(conn net.Conn) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.Conn = conn
+}
+
+func (e *ESPConnector) SetConnected(connected bool) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.isConnected = connected
+}
+
+func (e *ESPConnector) SetCurrentSession(session int) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	e.CurrentSession = session
+}
+
 func NewESPConnector() *ESPConnector {
 	return &ESPConnector{
 		isConnected: false,
@@ -53,38 +101,35 @@ func NewESPConnector() *ESPConnector {
 func (e *ESPConnector) Connect(ip, port string) error {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-
-	address := fmt.Sprintf("%s:%s", ip, port)
-
 	maxAttempts := 3
 	retryDelay := 5 * time.Second
 	var err error
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		log.Printf("Attempting to connect to ESP32 at %s (attempt %d/%d)", address, attempt, maxAttempts)
+		log.Printf("Attempting to connect to ESP32 at %s (attempt %d/%d)", ip, attempt, maxAttempts)
 
-		Conn, dialErr := net.Dial("tcp", address)
+		Conn, dialErr := net.Dial("tcp", ip)
 		if dialErr == nil {
 			e.IP = ip
 			e.Port = port
 			e.Conn = Conn
 			e.isConnected = true
 
-			log.Printf("Successfully connected to ESP32 at %s on attempt %d", address, attempt)
+			log.Printf("Successfully connected to ESP32 at %s on attempt %d", ip, attempt)
 			return nil
 		}
 
 		err = dialErr
 
 		if attempt < maxAttempts {
-			log.Printf("Connection attempt %d failed: %v. Retrying in %v...", attempt, dialErr, retryDelay)
+			log.Printf("Connection attempt %d failed: %v. Retrying in %v...", ip, dialErr, retryDelay)
 			time.Sleep(retryDelay)
 			retryDelay = time.Duration(float64(retryDelay) * 1.5)
 		}
 	}
 	e.Conn = nil
 	e.isConnected = false
-	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", address, maxAttempts, err)
+	return fmt.Errorf("failed to connect to ESP32 at %s after %d attempts: %v", ip, maxAttempts, err)
 }
 
 func (e *ESPConnector) SendCommand(command string, sessionId int) error {
@@ -93,8 +138,8 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
+		return errors.New("ESP_NOT_CONNECTED")
 	}
-
 	var message string
 	if sessionId == 0 {
 		message = command
@@ -102,10 +147,14 @@ func (e *ESPConnector) SendCommand(command string, sessionId int) error {
 		e.CurrentSession = sessionId
 		message = fmt.Sprintf("%s SESSION_ID=%d", command, sessionId)
 	}
-
 	_, err := e.Conn.Write([]byte(message + "\n"))
+
 	if err != nil {
 		e.isConnected = false
+		if e.Conn != nil {
+			e.Conn.Close()
+			e.Conn = nil
+		}
 		return fmt.Errorf("failed to send command to ESP32: %v", err)
 	}
 
@@ -119,13 +168,13 @@ func (e *ESPConnector) SendParamsToDevice(params models.Params) error {
 
 	if !e.isConnected || e.Conn == nil {
 		log.Printf("not Connected to ESP32")
+		return errors.New("ESP_NOT_CONNECTED")
 	}
 
 	message := fmt.Sprintf("SET_SETTINGS: SF=%.1f, TX=%.1f, BW=%.1f", params.Sf, params.Tx, params.Bandwidth)
 
 	_, err := e.Conn.Write([]byte(message + "\n"))
 	if err != nil {
-		e.isConnected = false
 		return fmt.Errorf("failed to send params to ESP32: %v", err)
 	}
 
@@ -181,48 +230,44 @@ func (e *ESPConnector) Close() error {
 		err := e.Conn.Close()
 		e.Conn = nil
 		e.isConnected = false
+		log.Printf("Closing connection with esp on teardown")
 		return err
 	}
 	return nil
 }
 
-func (e *ESPConnector) MaintainConnection(ip, port string, dataHandler func(string)) {
+func (e *ESPConnector) MaintainConnection(dataHandler func(string)) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		if !e.IsConnected() {
 			log.Printf("Attempting to reConnect to ESP32...")
-			err := e.Connect(ip, port)
+			err := e.ListeningStart(dataHandler)
 			if err != nil {
-				log.Printf("Failed to reConnect to ESP32: %v", err)
-			} else {
-				err = e.ListeningStart(dataHandler)
-				if err != nil {
-					return
-				}
+				return
 			}
 		}
 	}
 }
 
 func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
-	reader := bufio.NewReader(e.Conn)
+	scanner := bufio.NewScanner(e.Conn)
 	log.Printf("Listening on ESP32...")
-	for {
-		message, err := reader.ReadString('\n')
-		if err != nil {
-			e.mutex.Lock()
-			e.isConnected = false
-			e.Conn = nil
-			e.mutex.Unlock()
-			log.Printf("error reading from ESP32: %v", err)
-			return err
-		}
+	for scanner.Scan() {
+		message := scanner.Text()
 		if message == "" {
 			continue
+		}
+		if strings.HasPrefix(message, "ACK") {
+			log.Printf("ACK: %s", message)
 		}
 		log.Printf("Received message from ESP32: %s", message)
 		dataHandler(message)
 	}
+	if err := scanner.Err(); err != nil {
+		log.Println("Error reading:", err.Error())
+		return err
+	}
+	return nil
 }

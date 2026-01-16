@@ -1,0 +1,160 @@
+@startuml
+title Server request handling & processing (sequence)
+
+actor User
+participant ESPDevice
+participant Server
+participant Handlers
+participant DataService
+participant ESPConnector
+participant PostgresRepo
+participant "ClientConn\n(receiver)" as ClientConn
+
+
+== Client -> Server: send command (SET_SETTINGS / START_MEASUREMENT / GET_MEASUREMENT_SESSIONS / ADD_SESSION / REMOVE_SESSION) ==
+User -> Server : "LINE\n(e.g. SET_SETTINGS: SF=7, TX=10, BW=125)"
+activate Server
+
+Server -> Handlers : ParseClientMessage(message)
+activate Handlers
+Handlers --> Server : Message (SetSettings / StartMeasurement / GetMeasurementSessions / AddSession / RemoveSession / EspMessage)
+deactivate Handlers
+
+alt message == SET_SETTINGS
+    Server -> ESPConnector : IsConnected()
+    activate ESPConnector
+    ESPConnector --> Server : true / false
+    deactivate ESPConnector
+
+    alt ESP connected
+        Server -> Server : registerClient(id, conn)
+        Server -> Server : HandleSetSettings(conn, message)
+        Server -> DataService : ProcessInterfaceSettingChange(conn, message)
+        activate DataService
+        DataService -> DataService : parse params and enqueue
+        deactivate DataService
+
+        note over DataService: asynchronous processing continues\nin processInterfaceSettingsChange goroutine
+    else ESP not connected
+        Server -> DataService : AddPendingMessage(message, models.Lora / Client, type)
+        Server -> Server : addWaitingClient(conn)
+    end
+end
+
+alt message == START_MEASUREMENT
+    Server -> ESPConnector : IsConnected()
+    activate ESPConnector
+    ESPConnector --> Server : true / false
+    deactivate ESPConnector
+
+alt ESP connected
+    Server -> Server : registerClient(id, conn)
+    Server -> Server : handleStartMeasurement(conn, sessionId)
+    Server -> ESPConnector : SendCommand("START_MEASUREMENT", sessionId)
+    activate ESPConnector
+    ESPConnector --> Server : success / error
+    deactivate ESPConnector
+else ESP not connected
+    Server -> DataService : AddPendingMessage(message, models.Lora, StartMeasurementMessage{})
+    Server -> Server : addWaitingClient(conn)
+end
+end
+
+alt message == GET_MEASUREMENT_SESSIONS
+    Server -> DataService : GetAllSessions()
+    activate DataService
+    DataService -> PostgresRepo : GetAllSessions()
+    activate PostgresRepo
+    PostgresRepo --> DataService : []Session
+    deactivate PostgresRepo
+    DataService --> Server : []Session
+    deactivate DataService
+    Server -> DataService : SendAllSessions(conn, sessionsStr)
+    activate DataService
+    DataService -> Server : write response to conn
+    deactivate DataService
+end
+
+alt message == ADD_SESSION / REMOVE_SESSION
+    Server -> DataService : SaveSession(session) / RemoveSession(id)
+    activate DataService
+    DataService -> PostgresRepo : SaveSession(...) / RemoveSession(...)
+    activate PostgresRepo
+    PostgresRepo --> DataService : success / error
+    deactivate PostgresRepo
+    DataService --> Server : ack / error
+    deactivate DataService
+end
+
+deactivate Server
+
+== ESP IDENTIFY / ESP connection ==
+ESPDevice -> Server : "IDENTIFY"
+activate Server
+Server -> ESPConnector : SetConnected(true); SetIP(...); SetConn(conn)
+Server -> DataService : EspInitializer(espConnector)
+activate DataService
+DataService -> ESPConnector : Start ListeningStart(dataHandler) // goroutine
+DataService -> ESPConnector : MaintainConnection(ip, port, dataHandler) // goroutine
+deactivate DataService
+Server --> ESPDevice : "OK\n"
+deactivate Server
+
+== ESP sends measurement data ==
+ESPDevice -> ESPConnector : "MEASUREMENT: {...}\n"
+activate ESPConnector
+ESPConnector -> DataService : dataHandler(message)
+deactivate ESPConnector
+
+activate DataService
+DataService -> DataService : ProcessPacketData(buffer) // parse packet
+DataService -> DataService : try push to packetChan (non-blocking)
+alt channel full
+DataService -> PostgresRepo : Save(packet, currentSession) // store directly
+activate PostgresRepo
+PostgresRepo --> DataService : success
+deactivate PostgresRepo
+DataService -> DataService : Spawn DrainDataChannel() goroutine
+loop for each packet in channel:
+DataService -> PostgresRepo: Save(packet, currentSession)
+end loop
+
+else channel not full
+DataService -> DataService: enqueue packet
+note right: packet stored in channel for processing
+end
+deactivate DataService
+
+== Packet processing goroutine ==
+activate DataService
+DataService -> PostgresRepo : Save(packet, currentSession)
+loop activate PostgresRepo
+PostgresRepo --> DataService : success / error
+deactivate PostgresRepo
+
+DataService -> DataService : FindClientConnection() -> clientConn
+alt clientConn found
+DataService -> ClientConn : SendPacketToClient(clientConn, packet)
+activate ClientConn
+ClientConn --> User : "MEASUREMENT: [...]"
+deactivate ClientConn
+else no client found
+DataService -> DataService : AddPendingMessage(packet, models.Client, handlers.IncomingMeasurementMessage{})
+end
+deactivate DataService
+
+== Pending messages handling (when ESP becomes available) ==
+DataService -> DataService : onEspConnected() -> processPendingMessages()
+activate DataService
+loop for each pending
+alt pending.Type == SetSettingsMessage
+DataService -> ESPConnector : ProcessInterfaceSettingChange(conn, pending.Message) / SendParamsToDevice(...)
+else pending.Type == StartMeasurementMessage
+DataService -> ESPConnector : SendCommand("START_MEASUREMENT", sessionId)
+else incoming measurement pending
+DataService -> ClientConn : SendMeasurementsToClient(...)
+end
+end
+deactivate DataService
+
+@enduml
