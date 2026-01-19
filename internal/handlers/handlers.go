@@ -252,12 +252,12 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 	} else if strings.HasPrefix(message, "MEASUREMENT:") {
 		cleaned := strings.TrimPrefix(message, "MEASUREMENT:")
 		packetParser := PacketParser{}
-		_, err := packetParser.ParsePacketData(cleaned)
+		data, err := packetParser.ParsePacketData(cleaned)
 		if err != nil {
 			return IncomingMeasurementMessage{}, fmt.Errorf("error parsing incoming measurement: %w", err)
 		}
 		incoming := IncomingMeasurementMessage{
-			Data:      *packetParser.Data,
+			Data:      data,
 			sessionId: 0,
 		}
 		return incoming, nil
