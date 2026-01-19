@@ -427,7 +427,7 @@ func (s *DataService) SendPacketToClient(conn net.Conn, packet models.Packet) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	message := fmt.Sprintf("MEASUREMENT: [%s, %d, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
+	message := fmt.Sprintf("MEASUREMENT: [%s, %f, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
 	_, err := conn.Write([]byte(message + "\n"))
 	if err != nil {
 		log.Printf("Error sending message to client: %v", err)
