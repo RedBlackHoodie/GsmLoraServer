@@ -59,12 +59,12 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
-	go func() {
-		err := s.espConnector.ListeningStart(s.handleESPData)
-		if err != nil {
-			log.Printf("Error starting listening: %v", err)
-		}
-	}()
+	//go func() {
+	//	err := s.espConnector.ListeningStart(s.handleESPData)
+	//	if err != nil {
+	//		log.Printf("Error starting listening: %v", err)
+	//	}
+	//}()
 	go s.espConnector.MaintainConnection(s.handleESPData)
 	return nil
 }
@@ -88,19 +88,13 @@ func (s *DataService) GetPacketChannel() <-chan *models.Packet {
 	return s.packetChan
 }
 
-func (s *DataService) ProcessPacketData(buffer string) error {
-	parser := handlers.PacketParser{}
-	data, err := parser.ParsePacketData(buffer)
-
-	if err != nil {
-		log.Printf("Unexpected error while parsing packet: %v", err)
-	}
-
+func (s *DataService) ProcessPacketData(packet models.Packet) error {
+	log.Printf("Processing packet: %v", packet)
 	select {
-	case s.packetChan <- &data:
+	case s.packetChan <- &packet:
 	default:
-		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
-		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
+		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", packet)
+		err := s.Repo.Save(&packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Unexpected error while saving data: %v", err)
 		}
@@ -115,6 +109,35 @@ func (s *DataService) ProcessPacketData(buffer string) error {
 
 	return nil
 }
+
+//
+//func (s *DataService) ProcessPacketData(buffer string) error {
+//	parser := handlers.PacketParser{}
+//	data, err := parser.ParsePacketData(buffer)
+//
+//	if err != nil {
+//		log.Printf("Unexpected error while parsing packet: %v", err)
+//	}
+//
+//	select {
+//	case s.packetChan <- &data:
+//	default:
+//		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
+//		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
+//		if err != nil {
+//			log.Printf("Unexpected error while saving data: %v", err)
+//		}
+//		go func() {
+//			err := s.DrainDataChannel()
+//			if err != nil {
+//				log.Printf("Error during channel drain: %v", err)
+//			}
+//		}()
+//	}
+//	log.Printf("Data channel usage :%f", s.GetChannelUsage())
+//
+//	return nil
+//}
 
 func (s *DataService) DrainDataChannel() error {
 	for i := 0; i < len(s.packetChan); i++ {
@@ -193,11 +216,10 @@ func (s *DataService) handleESPData(data string) {
 		s.onEspConnected()
 		return
 	}
-
-	err := s.ProcessPacketData(data)
-	if err != nil {
-		log.Printf("Error processing packet data to chan: %v", err)
-	}
+	//err := s.ProcessPacketData(data)
+	//if err != nil {
+	//	log.Printf("Error processing packet data to chan: %v", err)
+	//}
 }
 
 func (s *DataService) processPackets() {

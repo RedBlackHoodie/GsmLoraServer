@@ -187,6 +187,7 @@ func (m RemoveSessionMessage) Type() string          { return "REMOVE_SESSION" }
 func (m UnknownMessage) Type() string                { return "UNKNOWN" }
 func (m EspMessage) Type() string                    { return "ESP_IDENTIFY" }
 func (m InitialEspConnectionMessage) Type() string   { return "INITIAL_ESP_CONNECTION" }
+func (m IncomingMeasurementMessage) Type() string    { return "ESP_MEASUREMENT" }
 
 type GetMessage struct {
 	What string
@@ -248,6 +249,18 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		return RemoveSessionMessage{SessionId: sessionId}, nil
 	} else if strings.HasPrefix(message, "IDENTIFY") {
 		return EspMessage{}, nil
+	} else if strings.HasPrefix(message, "MEASUREMENT:") {
+		cleaned := strings.TrimPrefix(message, "MEASUREMENT:")
+		packetParser := PacketParser{}
+		_, err := packetParser.ParsePacketData(cleaned)
+		if err != nil {
+			return IncomingMeasurementMessage{}, fmt.Errorf("error parsing incoming measurement: %w", err)
+		}
+		incoming := IncomingMeasurementMessage{
+			Data:      *packetParser.Data,
+			sessionId: 0,
+		}
+		return incoming, nil
 	}
 
 	return UnknownMessage{}, nil

@@ -150,16 +150,20 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
-		case handlers.UnknownMessage:
-			log.Printf("Unknown message type: %v", message)
-
 		case handlers.EspMessage:
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			id := "identify_esp" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
-
+		case handlers.IncomingMeasurementMessage:
+			log.Printf("Received incoming measurement: %v", msg)
+			err = s.measurementHandler.ProcessPacketData(msg.Data)
+			id := "meas_esp" + strconv.Itoa(count)
+			s.registerClient(id, conn)
+			s.updateClientInteraction(id)
+		case handlers.UnknownMessage:
+			log.Printf("Unknown message type: %v", message)
 		default:
 			log.Printf("Unhandled message type: %T", msg)
 		}
