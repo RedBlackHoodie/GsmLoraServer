@@ -269,9 +269,9 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			sessionId: 0,
 		}
 		return incoming, nil
-	} else if strings.HasPrefix("ACK", message) {
+	} else if strings.HasPrefix("ACK: ", message) {
 		return AckMessage{}, nil
-	} else if strings.HasPrefix("ERROR", message) {
+	} else if strings.HasPrefix("ERROR: ", message) {
 		return ErrMessage{error: message}, nil
 	}
 
