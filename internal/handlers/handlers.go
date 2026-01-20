@@ -174,6 +174,12 @@ type IncomingMeasurementMessage struct {
 
 type EspMessage struct{}
 
+type AckMessage struct{}
+
+type ErrMessage struct {
+	error string
+}
+
 type InitialEspConnectionMessage struct{}
 type UnknownMessage struct{}
 
@@ -188,6 +194,8 @@ func (m UnknownMessage) Type() string                { return "UNKNOWN" }
 func (m EspMessage) Type() string                    { return "ESP_IDENTIFY" }
 func (m InitialEspConnectionMessage) Type() string   { return "INITIAL_ESP_CONNECTION" }
 func (m IncomingMeasurementMessage) Type() string    { return "ESP_MEASUREMENT" }
+func (m AckMessage) Type() string                    { return "ACK" }
+func (m ErrMessage) Type() string                    { return "ERROR" }
 
 type GetMessage struct {
 	What string
@@ -261,6 +269,10 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			sessionId: 0,
 		}
 		return incoming, nil
+	} else if strings.HasPrefix("ACK", message) {
+		return AckMessage{}, nil
+	} else if strings.HasPrefix("ERROR", message) {
+		return ErrMessage{error: message}, nil
 	}
 
 	return UnknownMessage{}, nil

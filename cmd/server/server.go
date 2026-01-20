@@ -162,6 +162,10 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			id := "meas_esp" + strconv.Itoa(count)
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
+		case handlers.AckMessage:
+			log.Printf("Received ack message: %v", msg)
+		case handlers.ErrMessage:
+			log.Printf("Received err message from master: %v", msg)
 		case handlers.UnknownMessage:
 			log.Printf("Unknown message type: %v", message)
 		default:
