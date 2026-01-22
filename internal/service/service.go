@@ -52,20 +52,14 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 func (s *DataService) EspInitializer(connector esp.Connector) error {
 	s.espConnector = connector.(*esp.ESPConnector)
 	if s.espConnector == nil {
-		return errors.New("esp connector is nilptr")
+		return errors.New("esp connector is undefined")
 	}
 	if !s.espConnector.IsConnected() {
 		log.Printf("esp is not connected while initializing service")
 		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
-	//go func() {
-	//	err := s.espConnector.ListeningStart(s.handleESPData)
-	//	if err != nil {
-	//		log.Printf("Error starting listening: %v", err)
-	//	}
-	//}()
-	go s.espConnector.MaintainConnection(s.handleESPData)
+	//go s.espConnector.MaintainConnection(s.handleESPData)
 	return nil
 }
 
@@ -110,40 +104,11 @@ func (s *DataService) ProcessPacketData(packet models.Packet) error {
 	return nil
 }
 
-//
-//func (s *DataService) ProcessPacketData(buffer string) error {
-//	parser := handlers.PacketParser{}
-//	data, err := parser.ParsePacketData(buffer)
-//
-//	if err != nil {
-//		log.Printf("Unexpected error while parsing packet: %v", err)
-//	}
-//
-//	select {
-//	case s.packetChan <- &data:
-//	default:
-//		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
-//		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
-//		if err != nil {
-//			log.Printf("Unexpected error while saving data: %v", err)
-//		}
-//		go func() {
-//			err := s.DrainDataChannel()
-//			if err != nil {
-//				log.Printf("Error during channel drain: %v", err)
-//			}
-//		}()
-//	}
-//	log.Printf("Data channel usage :%f", s.GetChannelUsage())
-//
-//	return nil
-//}
-
 func (s *DataService) DrainDataChannel() error {
 	for i := 0; i < len(s.packetChan); i++ {
 		select {
 		case packet := <-s.packetChan:
-			err := s.Repo.Save(packet, 0)
+			err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 			if err != nil {
 				log.Printf("Error saving packet during drain: %v", err)
 			}

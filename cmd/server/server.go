@@ -10,11 +10,15 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
+
+type DeviceStatus struct {
+	LastUpdated time.Time
+	Status      string
+}
 
 type Client struct {
 	conn            net.Conn
@@ -31,6 +35,8 @@ type Server struct {
 	connector          esp.Connector
 	waitList           []net.Conn
 	waitListMutex      sync.RWMutex
+	SlaveState         DeviceStatus
+	MasterState        DeviceStatus
 }
 
 func NewServer(h core.MeasurementHandler, connector esp.Connector) *Server {
@@ -38,6 +44,8 @@ func NewServer(h core.MeasurementHandler, connector esp.Connector) *Server {
 		clients:            make(map[string]*Client),
 		measurementHandler: h,
 		connector:          connector,
+		SlaveState:         DeviceStatus{},
+		MasterState:        DeviceStatus{},
 	}
 }
 
@@ -75,7 +83,6 @@ func (s *Server) StartServer(port string) error {
 func (s *Server) HandleConnection(conn net.Conn) error {
 	log.Printf("Client connected from %s", conn.RemoteAddr())
 	scanner := bufio.NewScanner(conn)
-	count := 0
 
 	//go s.startConnectionChecker()
 	for scanner.Scan() {
@@ -91,7 +98,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		log.Printf("Parsed message type: %T", parsedMsg)
 		switch msg := parsedMsg.(type) {
 		case handlers.SetSettingsMessage:
-			id := "settings-change" + strconv.Itoa(count)
+			id := "settings-change"
 			log.Printf("Setting change %s", id)
 			if s.connector.IsConnected() {
 				s.registerClient(id, conn)
@@ -111,7 +118,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			}
 
 		case handlers.StartMeasurementMessage:
-			id := "start-meas" + strconv.Itoa(count)
+			id := "start-meas"
 			log.Printf("Starting handling measurement for %s", id)
 			if s.connector.IsConnected() {
 				s.handleStartMeasurement(conn, msg.SessionId)
@@ -134,32 +141,32 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			return nil
 		case handlers.GetMeasurementSessionsMessage: //esp not used here
 			s.HandleGetMeasurementSessions(conn)
-			id := "get-sessions" + strconv.Itoa(count)
+			id := "get-sessions"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
 		case handlers.AddSessionMessage: //esp not used here
 			s.HandleAddSession(conn, msg.Session)
-			id := "add-session" + strconv.Itoa(count)
+			id := "add-session"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
 		case handlers.RemoveSessionMessage: // esp not used here
 			s.HandleRemoveSession(conn, msg.SessionId)
-			id := "remove-session" + strconv.Itoa(count)
+			id := "remove-session"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
 		case handlers.EspMessage:
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
-			id := "identify_esp" + strconv.Itoa(count)
+			id := "identify_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 		case handlers.IncomingMeasurementMessage:
 			log.Printf("Received incoming measurement: %v", msg)
 			err = s.measurementHandler.ProcessPacketData(msg.Data)
-			id := "meas_esp" + strconv.Itoa(count)
+			id := "meas_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 		case handlers.AckMessage:
@@ -168,10 +175,22 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			log.Printf("Received err message from master: %v", msg)
 		case handlers.UnknownMessage:
 			log.Printf("Unknown message type: %v", message)
+		case handlers.MasterStatusMessage:
+			go s.StartStatusMonitor()
+			log.Printf("New status for master: %v", msg.Status)
+			err = s.SendMasterStatus(msg.Status)
+			if err != nil {
+				log.Printf("Error sending master status: %v", err)
+			}
+		case handlers.SlaveStatusMessage:
+			log.Printf("New status for slave: %v", msg.Status)
+			err = s.SendSlaveStatus(msg.Status)
+			if err != nil {
+				log.Printf("Error sending master status: %v", err)
+			}
 		default:
 			log.Printf("Unhandled message type: %T", msg)
 		}
-		count++
 		log.Printf("Received message: %v", message)
 	}
 	//s.checkIsConnectionsAlive()
@@ -329,7 +348,7 @@ func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 		sessions, err := s.measurementHandler.GetAllSessions()
 		if err != nil {
 			log.Printf("Error getting sessions: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 		var parts []string
@@ -340,13 +359,13 @@ func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 		sessionsStr := strings.Join(parts, ", ")
 		if err != nil {
 			log.Printf("Error joining sessions: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 		err = s.measurementHandler.SendAllSessions(conn, sessionsStr)
 		if err != nil {
 			log.Printf("Error sending sessions to client: %v", err)
-			conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
+			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 	}()
@@ -356,7 +375,6 @@ func (s *Server) HandleAddSession(conn net.Conn, session models.Session) {
 	err := s.measurementHandler.SaveSession(session)
 	if err != nil {
 		log.Printf("Error saving session: %v", err)
-		//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		return
 	}
 	log.Printf("Session saved: %v", session)
@@ -366,7 +384,6 @@ func (s *Server) HandleRemoveSession(conn net.Conn, sessionId int) {
 	err := s.measurementHandler.RemoveSession(sessionId)
 	if err != nil {
 		log.Printf("Error removing session: %v", err)
-		//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		return
 	}
 	log.Printf("Session removed: %v", sessionId)
@@ -385,6 +402,59 @@ func (s *Server) HandleEspConnection(conn net.Conn) {
 	log.Printf("ESP_OK")
 }
 
+func (s *Server) SendMasterStatus(status string) error {
+	if s.clients == nil {
+		log.Printf("No clients connected, skip sending master status")
+		return nil
+	}
+
+	s.MasterState.Status = status
+	s.MasterState.LastUpdated = time.Now()
+
+	return s.SendStatus("SLAVE_STATUS " + status)
+}
+
+func (s *Server) SendSlaveStatus(status string) error {
+	if s.clients == nil {
+		log.Printf("No clients connected, skip sending master status")
+		return nil
+	}
+
+	s.SlaveState.Status = status
+	s.SlaveState.LastUpdated = time.Now()
+
+	return s.SendStatus("SLAVE_STATUS " + status)
+}
+
+func (s *Server) SendStatus(status string) error {
+
+	if client, exists := s.clients["start-meas"]; exists {
+		client.mutex.RLock()
+		if client.isActive {
+			conn := client.conn
+			_, err := conn.Write([]byte(status))
+			if err != nil {
+				return err
+			}
+		}
+		client.mutex.RUnlock()
+		return nil
+	} else if client, exists := s.clients["settings-change"]; exists {
+		client.mutex.RLock()
+		if client.isActive {
+			conn := client.conn
+			_, err := conn.Write([]byte(status))
+			if err != nil {
+				return err
+			}
+		}
+		client.mutex.RUnlock()
+		return nil
+	}
+
+	return errors.New("no interface connected")
+}
+
 func (c *Client) setInactive() {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -400,6 +470,41 @@ func (c *Client) isConnectionAlive() bool {
 		return false
 	}
 	return c.isActive && time.Since(inter) < 5*time.Minute
+}
+
+func (s *Server) StartStatusMonitor() {
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			s.checkAndUpdateStatus()
+		}
+	}()
+}
+
+func (s *Server) checkAndUpdateStatus() {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	now := time.Now()
+
+	if !s.MasterState.LastUpdated.IsZero() && now.Sub(s.MasterState.LastUpdated) > 120*time.Second {
+		log.Printf("Master статус не обновлялся более 2 минут, меняем на disabled")
+
+		err := s.SendMasterStatus("DISCONNECTED")
+		if err != nil {
+			log.Printf("Error sending master status: %v", err)
+		}
+	}
+
+	if !s.SlaveState.LastUpdated.IsZero() && now.Sub(s.SlaveState.LastUpdated) > 120*time.Second {
+		log.Printf("Slave статус не обновлялся более 2 минут, меняем на disabled")
+		err := s.SendSlaveStatus("DISCONNECTED")
+		if err != nil {
+			log.Printf("Error sending master status: %v", err)
+		}
+	}
 }
 
 //func (s *Server) startConnectionChecker() {

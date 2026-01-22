@@ -107,46 +107,12 @@ func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	return packet, nil
 }
 
-//func SendParamsToDevice(ip string, port string, config models.Params) error {
-//	target := ip + ":" + port
-//	timeout := 10 * time.Second
-//	conn, err := net.DialTimeout("tcp", target, timeout)
-//	if err != nil {
-//		log.Println(fmt.Errorf("error connecting to device: %v", err))
-//		return err
-//	}
-//	defer func(conn net.Conn) {
-//		err := conn.Close()
-//		if err != nil {
-//			log.Printf("Error closing connection: %v", err)
-//		}
-//	}(conn)
-//
-//	log.Printf("Connected to device %v", ip)
-//
-//	message := fmt.Sprintf("sf: %f, tx: %f, bw: %f", config.Sf, config.Tx, config.Bandwidth)
-//
-//	_, err = conn.Write([]byte(message))
-//
-//	if err != nil {
-//		log.Println(fmt.Errorf("error sending message: %v", err))
-//		return err
-//	}
-//	log.Printf("Sent params: %v", message)
-//	return nil
-//}
-
 type Message interface {
 	Type() string
 }
 
 type SetSettingsMessage struct {
 	Params models.Params
-}
-
-type GetDataMessage struct {
-	SessionId int
-	Data      []models.Packet
 }
 
 type StartMeasurementMessage struct {
@@ -181,10 +147,17 @@ type ErrMessage struct {
 }
 
 type InitialEspConnectionMessage struct{}
+
+type MasterStatusMessage struct {
+	Status string
+}
+
+type SlaveStatusMessage struct {
+	Status string
+}
 type UnknownMessage struct{}
 
 func (m SetSettingsMessage) Type() string            { return "SET_SETTINGS" }
-func (m GetDataMessage) Type() string                { return "GET_MEASUREMENT" }
 func (m StartMeasurementMessage) Type() string       { return "START_MEASUREMENT" }
 func (m StopMeasurementMessage) Type() string        { return "STOP_MEASUREMENT" }
 func (m GetMeasurementSessionsMessage) Type() string { return "GET_MEASUREMENT_SESSIONS" }
@@ -196,6 +169,8 @@ func (m InitialEspConnectionMessage) Type() string   { return "INITIAL_ESP_CONNE
 func (m IncomingMeasurementMessage) Type() string    { return "ESP_MEASUREMENT" }
 func (m AckMessage) Type() string                    { return "ACK" }
 func (m ErrMessage) Type() string                    { return "ERROR" }
+func (m MasterStatusMessage) Type() string           { return "MASTER_STATUS" }
+func (m SlaveStatusMessage) Type() string            { return "SLAVE_STATUS" }
 
 type GetMessage struct {
 	What string
@@ -210,18 +185,6 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		return SetSettingsMessage{Params: par}, nil
 
-		//} else if strings.HasPrefix(message, "GET_MEASUREMENT") {
-		//	sessionId := 0
-		//	_, err := fmt.Sscanf(message, "GET_MEASUREMENT: SESSION_ID=%d", &sessionId)
-		//	if err != nil {
-		//		log.Printf("error parsing get_measurement: %v", err)
-		//	}
-		//	data, err := h.GetMeasurements(int32(sessionId))
-		//	if err != nil {
-		//		return nil, err
-		//	}
-		//
-		//	return GetDataMessage{SessionId: sessionId, Data: data}, nil
 	} else if strings.HasPrefix(message, "START_MEASUREMENT") {
 		cleaned := strings.TrimPrefix(message, "START_MEASUREMENT: ")
 		sessionId, err := strconv.Atoi(strings.TrimSpace(cleaned))
@@ -229,17 +192,10 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			log.Printf("error parsing get request: %v", err)
 		}
 		return StartMeasurementMessage{SessionId: sessionId}, nil
-		//} else if strings.HasPrefix(message, "STOP_MEASUREMENT") {
-		//	cleaned := strings.TrimPrefix(message, "STOP_MEASUREMENT: ")
-		//	requestId, err := strconv.Atoi(strings.TrimSpace(cleaned))
-		//
-		//	if err != nil {
-		//		log.Printf("error parsing get request: %v", err)
-		//	}
-		//	return StopMeasurementMessage{RequestId: requestId}, nil
-		//}
+
 	} else if strings.HasPrefix(message, "GET_MEASUREMENT_SESSIONS") {
 		return GetMeasurementSessionsMessage{}, nil
+
 	} else if strings.HasPrefix(message, "ADD_SESSION") {
 		sessionStr := strings.TrimPrefix(message, "ADD_SESSION: ")
 		session, err := ParseSession(sessionStr)
@@ -248,6 +204,7 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			return nil, err
 		}
 		return AddSessionMessage{Session: session}, nil
+
 	} else if strings.HasPrefix(message, "REMOVE_SESSION") {
 		sessionId, err := ParseRemoveSessionMessage(message)
 		if err != nil {
@@ -255,8 +212,10 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			return nil, err
 		}
 		return RemoveSessionMessage{SessionId: sessionId}, nil
+
 	} else if strings.HasPrefix(message, "IDENTIFY") {
 		return EspMessage{}, nil
+
 	} else if strings.HasPrefix(message, "MEASUREMENT:") {
 		cleaned := strings.TrimPrefix(message, "MEASUREMENT:")
 		packetParser := PacketParser{}
@@ -269,10 +228,22 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 			sessionId: 0,
 		}
 		return incoming, nil
-	} else if strings.HasPrefix("ACK: ", message) {
+
+	} else if strings.Contains("ACK", message) {
 		return AckMessage{}, nil
-	} else if strings.HasPrefix("ERROR: ", message) {
+
+	} else if strings.Contains("ERROR", message) {
 		return ErrMessage{error: message}, nil
+
+	} else if strings.Contains("MASTER_STATUS", message) {
+		status := strings.TrimPrefix(message, "MASTER_STATUS ")
+
+		return MasterStatusMessage{status}, nil
+
+	} else if strings.Contains("SLAVE_STATUS", message) {
+		status := strings.TrimPrefix(message, "SLAVE_STATUS ")
+
+		return SlaveStatusMessage{status}, nil
 	}
 
 	return UnknownMessage{}, nil
