@@ -411,7 +411,7 @@ func (s *Server) SendMasterStatus(status string) error {
 	s.MasterState.Status = status
 	s.MasterState.LastUpdated = time.Now()
 
-	return s.SendStatus("SLAVE_STATUS " + status)
+	return s.SendStatus("MASTER_STATUS " + status)
 }
 
 func (s *Server) SendSlaveStatus(status string) error {
