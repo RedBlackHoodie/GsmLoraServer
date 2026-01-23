@@ -446,7 +446,7 @@ func (s *Server) SendSlaveStatus(status string) error {
 
 func (s *Server) SendStatus(status string) error {
 
-	if client, exists := s.clients["settings-change"]; exists {
+	if client, exists := s.clients["get-sessions"]; exists {
 		client.mutex.RLock()
 		defer client.mutex.RUnlock()
 		if client.isActive {
