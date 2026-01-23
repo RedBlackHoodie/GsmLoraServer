@@ -78,7 +78,11 @@ func (r *Repo) CreatePacketsTable() error {
 		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
 		)
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *Repo) CreateSessionsTable() error {
@@ -96,6 +100,47 @@ func (r *Repo) CreateSessionsTable() error {
 	return nil
 }
 
+func (r *Repo) InitializeSessionCounts() error {
+	_, err := r.db.Exec(`
+        UPDATE sessions s
+        SET count = COALESCE(
+            (SELECT COUNT(*) FROM packets p WHERE p.session_id = s.id),
+            0
+        );
+    `)
+	return err
+}
+
+func (r *Repo) CreateCountingTrigger() error {
+	_, err := r.db.Exec(`
+        CREATE OR REPLACE FUNCTION update_session_count()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            UPDATE sessions 
+            SET count = count + 1 
+            WHERE id = NEW.session_id;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    `)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger function: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        DROP TRIGGER IF EXISTS increment_session_count ON packets;
+        CREATE TRIGGER increment_session_count
+        AFTER INSERT ON packets
+        FOR EACH ROW
+        EXECUTE FUNCTION update_session_count();
+    `)
+
+	if err != nil {
+		return fmt.Errorf("failed to create trigger: %w", err)
+	}
+	return nil
+}
+
 func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 	var id int
 	var err error
@@ -108,8 +153,7 @@ func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
-		packet.RequestId,
+		"(rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7)", /*request_id,*/
 		packet.RSSI,
 		packet.SNRL,
 		packet.Coordinate.Latitude,
@@ -185,11 +229,11 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 	return sessions, nil
 }
 
-func (r *Repo) FindById(requestId int) ([]models.Packet, error) {
+func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
 	rows, err := r.db.Query(
 		"SELECT "+
-			"request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
-		requestId,
+			"rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE session_id = $1",
+		sessionId,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -201,7 +245,6 @@ func (r *Repo) FindById(requestId int) ([]models.Packet, error) {
 	for rows.Next() {
 		var packet models.Packet
 		err := rows.Scan(
-			&packet.RequestId,
 			&packet.RSSI,
 			&packet.SNRL,
 			&packet.Coordinate.Latitude,

@@ -52,20 +52,14 @@ func NewDataService(connector *esp.ESPConnector) *DataService {
 func (s *DataService) EspInitializer(connector esp.Connector) error {
 	s.espConnector = connector.(*esp.ESPConnector)
 	if s.espConnector == nil {
-		return errors.New("esp connector is nilptr")
+		return errors.New("esp connector is undefined")
 	}
 	if !s.espConnector.IsConnected() {
 		log.Printf("esp is not connected while initializing service")
 		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
-	go func() {
-		err := s.espConnector.ListeningStart(s.handleESPData)
-		if err != nil {
-			log.Printf("Error starting listening: %v", err)
-		}
-	}()
-	go s.espConnector.MaintainConnection(s.handleESPData)
+	go s.espConnector.MaintainConnection()
 	return nil
 }
 
@@ -88,19 +82,13 @@ func (s *DataService) GetPacketChannel() <-chan *models.Packet {
 	return s.packetChan
 }
 
-func (s *DataService) ProcessPacketData(buffer string) error {
-	parser := handlers.PacketParser{}
-	data, err := parser.ParsePacketData(buffer)
-
-	if err != nil {
-		log.Printf("Unexpected error while parsing packet: %v", err)
-	}
-
+func (s *DataService) ProcessPacketData(packet models.Packet) error {
+	log.Printf("Processing packet: %v", packet)
 	select {
-	case s.packetChan <- &data:
+	case s.packetChan <- &packet:
 	default:
-		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", data)
-		err := s.Repo.Save(&data, s.espConnector.CurrentSession)
+		fmt.Printf("Channel full, saving data and starting channel drain: %+v\n", packet)
+		err := s.Repo.Save(&packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Unexpected error while saving data: %v", err)
 		}
@@ -120,7 +108,7 @@ func (s *DataService) DrainDataChannel() error {
 	for i := 0; i < len(s.packetChan); i++ {
 		select {
 		case packet := <-s.packetChan:
-			err := s.Repo.Save(packet, 0)
+			err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 			if err != nil {
 				log.Printf("Error saving packet during drain: %v", err)
 			}
@@ -193,11 +181,10 @@ func (s *DataService) handleESPData(data string) {
 		s.onEspConnected()
 		return
 	}
-
-	err := s.ProcessPacketData(data)
-	if err != nil {
-		log.Printf("Error processing packet data to chan: %v", err)
-	}
+	//err := s.ProcessPacketData(data)
+	//if err != nil {
+	//	log.Printf("Error processing packet data to chan: %v", err)
+	//}
 }
 
 func (s *DataService) processPackets() {
@@ -405,7 +392,7 @@ func (s *DataService) SendPacketToClient(conn net.Conn, packet models.Packet) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	message := fmt.Sprintf("MEASUREMENT: [%s, %d, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
+	message := fmt.Sprintf("MEASUREMENT: [%s, %f, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
 	_, err := conn.Write([]byte(message + "\n"))
 	if err != nil {
 		log.Printf("Error sending message to client: %v", err)
@@ -474,4 +461,26 @@ func (s *DataService) startPendingProcessing() {
 			}
 		}
 	}
+}
+
+func (s *DataService) GetAllSessionMeasurements(sessionId int) ([]models.Packet, error) {
+	packets, err := s.Repo.FindById(sessionId)
+	if err != nil {
+		log.Printf("Error getting all measurements for session: %v", err)
+		return nil, err
+	}
+
+	return packets, nil
+}
+
+func (s *DataService) SendSessionPackets(sessionId int, packets []models.Packet) error {
+	clientConn, _ := s.FindClientConnection()
+	if clientConn == nil {
+		log.Printf("Client not connected")
+		return errors.New("client not connected")
+	}
+	for _, packet := range packets {
+		s.SendPacketToClient(clientConn, packet)
+	}
+	return nil
 }
