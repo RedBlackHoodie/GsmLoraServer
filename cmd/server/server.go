@@ -428,7 +428,11 @@ func (s *Server) SendMasterStatus(status string) error {
 		return nil
 	}
 
-	s.MasterState.Status = status
+	if status == "ISALIVE" {
+		s.SlaveState.Status = "CONNECTED"
+	} else {
+		s.SlaveState.Status = "DISCONNECTED"
+	}
 	s.MasterState.LastUpdated = time.Now()
 	log.Printf("Sending master status: %v, %s, conn: %s", s.MasterState.Status, s.MasterState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
 
@@ -440,8 +444,11 @@ func (s *Server) SendSlaveStatus(status string) error {
 		log.Printf("No clients connected, skip sending slave status")
 		return nil
 	}
-
-	s.SlaveState.Status = status
+	if status == "ISALIVE" {
+		s.SlaveState.Status = "CONNECTED"
+	} else {
+		s.SlaveState.Status = "DISCONNECTED"
+	}
 	s.SlaveState.LastUpdated = time.Now()
 	log.Printf("Sending slave status: %v, %s, conn: %s", s.MasterState.Status, s.MasterState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
 
