@@ -158,8 +158,6 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.updateClientInteraction(id)
 
 		case handlers.EspMessage:
-			once := sync.Once{}
-			once.Do(func() { s.StartStatusMonitor() })
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			log.Printf("New status for master: %v", "CONNECTED")
@@ -167,6 +165,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			id := "identify_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
+			once := sync.Once{}
+			once.Do(func() { s.StartStatusMonitor() })
 		case handlers.IncomingMeasurementMessage:
 			log.Printf("Received incoming measurement: %v", msg)
 			err = s.measurementHandler.ProcessPacketData(msg.Data)
@@ -498,25 +498,25 @@ func (s *Server) checkAndUpdateStatus() {
 	now := time.Now()
 
 	if !s.MasterState.LastUpdated.IsZero() && now.Sub(s.MasterState.LastUpdated) > 120*time.Second && s.MasterState.Status != "DISCONNECTED" {
-		log.Printf("Master статус не обновлялся более 2 минут, меняем на DISCONNECTED")
+		log.Printf("Master state did not update for over 2 mins, change to DISCONNECTED")
 		log.Printf("Master state before: %s, after: %s", s.MasterState, "DISCONNECTED")
 
 		err := s.SendMasterStatus("DISCONNECTED")
 		if err != nil {
 			log.Printf("Error sending master status: %v", err)
 		}
-	} else {
+	} else if now.Sub(s.MasterState.LastUpdated) > 120*time.Second && s.MasterState.Status == "DISCONNECTED" {
 		log.Printf("Timeout expired, skip changing master status, stay DISCONNECTED")
 	}
 
 	if !s.SlaveState.LastUpdated.IsZero() && now.Sub(s.SlaveState.LastUpdated) > 120*time.Second && s.SlaveState.Status != "DISCONNECTED" {
-		log.Printf("Slave статус не обновлялся более 2 минут, меняем на DISCONNECTED")
+		log.Printf("Slave state did not update for over 2 mins, change to DISCONNECTED")
 		log.Printf("Slave state before: %s, after: %s", s.SlaveState.Status, "DISCONNECTED")
 		err := s.SendSlaveStatus("DISCONNECTED")
 		if err != nil {
 			log.Printf("Error sending master status: %v", err)
 		}
-	} else {
+	} else if now.Sub(s.SlaveState.LastUpdated) > 120*time.Second && s.SlaveState.Status == "DISCONNECTED" {
 		log.Printf("Timeout expired, skip changing slave status, stay DISCONNECTED")
 	}
 }
