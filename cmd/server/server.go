@@ -159,7 +159,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 
 		case handlers.EspMessage:
 			once := sync.Once{}
-			once.Do(func() { go s.StartStatusMonitor() })
+			once.Do(func() { s.StartStatusMonitor() })
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			log.Printf("New status for master: %v", "CONNECTED")
