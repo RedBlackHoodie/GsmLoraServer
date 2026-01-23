@@ -65,10 +65,6 @@ func (r *Repo) InitTables() (error, error) {
 	return r.CreateSessionsTable(), r.CreatePacketsTable()
 }
 
-func (r *Repo) UpdateSessionsTable() error {
-	return r.UpdateSessionsTable()
-}
-
 func (r *Repo) CreatePacketsTable() error {
 	_, err := r.db.Exec(`
 		CREATE TABLE IF NOT EXISTS packets (
