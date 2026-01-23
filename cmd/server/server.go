@@ -428,6 +428,7 @@ func (s *Server) SendMasterStatus(status string) error {
 
 	s.MasterState.Status = status
 	s.MasterState.LastUpdated = time.Now()
+	log.Printf("Sending master status: %v, %s", s.MasterState.Status, s.MasterState.LastUpdated)
 
 	return s.SendStatus("MASTER_STATUS " + status)
 }
@@ -440,6 +441,7 @@ func (s *Server) SendSlaveStatus(status string) error {
 
 	s.SlaveState.Status = status
 	s.SlaveState.LastUpdated = time.Now()
+	log.Printf("Sending slave status: %v, %s", s.MasterState.Status, s.MasterState.LastUpdated)
 
 	return s.SendStatus("SLAVE_STATUS " + status)
 }
