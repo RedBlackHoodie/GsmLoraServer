@@ -232,7 +232,6 @@ func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
 	for rows.Next() {
 		var packet models.Packet
 		err := rows.Scan(
-			&packet.RequestId,
 			&packet.RSSI,
 			&packet.SNRL,
 			&packet.Coordinate.Latitude,
