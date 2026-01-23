@@ -175,6 +175,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.updateClientInteraction(id)
 		case handlers.AckMessage:
 			log.Printf("Received ack message: %v", msg)
+			log.Printf("New status for master: %v", "CONNECTED")
+			err = s.SendMasterStatus("CONNECTED")
 		case handlers.ErrMessage:
 			log.Printf("Received err message from master: %v", msg)
 		case handlers.UnknownMessage:
