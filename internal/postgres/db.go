@@ -65,6 +65,10 @@ func (r *Repo) InitTables() (error, error) {
 	return r.CreateSessionsTable(), r.CreatePacketsTable()
 }
 
+func (r *Repo) UpdateSessionsTable() error {
+	return r.UpdateSessionsTable()
+}
+
 func (r *Repo) CreatePacketsTable() error {
 	_, err := r.db.Exec(`
 		CREATE TABLE IF NOT EXISTS packets (
@@ -82,7 +86,37 @@ func (r *Repo) CreatePacketsTable() error {
 		return err
 	}
 
-	_, err = r.db.Exec(`
+	return nil
+}
+
+func (r *Repo) CreateSessionsTable() error {
+	_, err := r.db.Exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id BIGINT PRIMARY KEY,
+			name VARCHAR(100) NOT NULL,
+			start_time TIMESTAMP NOT NULL,
+			end_time TIMESTAMP,
+		    count INTEGER NOT NULL
+		)`)
+	if err != nil {
+		return fmt.Errorf("failed to create sessions table: %w", err)
+	}
+	return nil
+}
+
+func (r *Repo) InitializeSessionCounts() error {
+	_, err := r.db.Exec(`
+        UPDATE sessions s
+        SET count = COALESCE(
+            (SELECT COUNT(*) FROM packets p WHERE p.session_id = s.id),
+            0
+        );
+    `)
+	return err
+}
+
+func (r *Repo) CreateCountingTrigger() error {
+	_, err := r.db.Exec(`
         CREATE OR REPLACE FUNCTION update_session_count()
         RETURNS TRIGGER AS $$
         BEGIN
@@ -107,22 +141,6 @@ func (r *Repo) CreatePacketsTable() error {
 
 	if err != nil {
 		return fmt.Errorf("failed to create trigger: %w", err)
-	}
-
-	return nil
-}
-
-func (r *Repo) CreateSessionsTable() error {
-	_, err := r.db.Exec(`
-		CREATE TABLE IF NOT EXISTS sessions (
-			id BIGINT PRIMARY KEY,
-			name VARCHAR(100) NOT NULL,
-			start_time TIMESTAMP NOT NULL,
-			end_time TIMESTAMP,
-		    count INTEGER NOT NULL
-		)`)
-	if err != nil {
-		return fmt.Errorf("failed to create sessions table: %w", err)
 	}
 	return nil
 }

@@ -38,6 +38,20 @@ func (a *App) InitDB(cfg *configs.Config) error {
 		}
 		return fmt.Errorf("failed to init tables: %w", err)
 	}
+	err = repo.InitializeSessionCounts()
+	if err != nil {
+		err := db.Close()
+		if err != nil {
+			return err
+		}
+	}
+	err = repo.CreateCountingTrigger()
+	if err != nil {
+		err := db.Close()
+		if err != nil {
+			return err
+		}
+	}
 	if a.DataService == nil {
 		a.DataService = service.NewDataService(a.EspConnector)
 	}
