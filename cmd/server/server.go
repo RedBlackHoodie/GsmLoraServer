@@ -161,6 +161,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			go s.StartStatusMonitor()
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
+			log.Printf("New status for master: %v", "CONNECTED")
+			err = s.SendMasterStatus("CONNECTED")
 			id := "identify_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
