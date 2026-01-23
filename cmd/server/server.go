@@ -457,7 +457,7 @@ func (s *Server) SendStatus(status string) error {
 			if err != nil {
 				log.Printf("Error setting write deadline: %v", err)
 			}
-			n, err := client.conn.Write([]byte(status))
+			n, err := client.conn.Write([]byte(status + "\n"))
 			log.Printf("Sending status to client: %v, %s", client, status)
 			if err != nil {
 				log.Printf("Error writing to connection (bytes written: %d): %v", n, err)
