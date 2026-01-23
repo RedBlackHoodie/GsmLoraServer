@@ -59,6 +59,7 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
+	go s.espConnector.MaintainConnection()
 	//go s.espConnector.MaintainConnection(s.handleESPData)
 	return nil
 }

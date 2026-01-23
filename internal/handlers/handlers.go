@@ -229,18 +229,18 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		return incoming, nil
 
-	} else if strings.Contains("ACK", message) {
+	} else if strings.Contains(message, "ACK") {
 		return AckMessage{}, nil
 
-	} else if strings.Contains("ERROR", message) {
+	} else if strings.Contains(message, "ERROR") {
 		return ErrMessage{error: message}, nil
 
-	} else if strings.Contains("MASTER_STATUS", message) {
+	} else if strings.Contains(message, "MASTER_STATUS") {
 		status := strings.TrimPrefix(message, "MASTER_STATUS ")
 
 		return MasterStatusMessage{status}, nil
 
-	} else if strings.Contains("SLAVE_STATUS", message) {
+	} else if strings.Contains(message, "SLAVE_STATUS") {
 		status := strings.TrimPrefix(message, "SLAVE_STATUS ")
 
 		return SlaveStatusMessage{status}, nil

@@ -78,7 +78,38 @@ func (r *Repo) CreatePacketsTable() error {
 		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
 		)
 	`)
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = r.db.Exec(`
+        CREATE OR REPLACE FUNCTION update_session_count()
+        RETURNS TRIGGER AS $$
+        BEGIN
+            UPDATE sessions 
+            SET count = count + 1 
+            WHERE id = NEW.session_id;
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql;
+    `)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger function: %w", err)
+	}
+
+	_, err = r.db.Exec(`
+        DROP TRIGGER IF EXISTS increment_session_count ON packets;
+        CREATE TRIGGER increment_session_count
+        AFTER INSERT ON packets
+        FOR EACH ROW
+        EXECUTE FUNCTION update_session_count();
+    `)
+
+	if err != nil {
+		return fmt.Errorf("failed to create trigger: %w", err)
+	}
+
+	return nil
 }
 
 func (r *Repo) CreateSessionsTable() error {
@@ -108,8 +139,8 @@ func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"(request_id, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
-		packet.RequestId,
+		/*request_id,*/ "(rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7)",
+		//packet.RequestId,
 		packet.RSSI,
 		packet.SNRL,
 		packet.Coordinate.Latitude,
