@@ -429,9 +429,9 @@ func (s *Server) SendMasterStatus(status string) error {
 	}
 
 	if status == "ISALIVE" {
-		s.SlaveState.Status = "CONNECTED"
+		s.MasterState.Status = "CONNECTED"
 	} else {
-		s.SlaveState.Status = "DISCONNECTED"
+		s.MasterState.Status = "DISCONNECTED"
 	}
 	s.MasterState.LastUpdated = time.Now()
 	log.Printf("Sending master status: %v, %s, conn: %s", s.MasterState.Status, s.MasterState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
