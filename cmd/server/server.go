@@ -452,6 +452,7 @@ func (s *Server) SendStatus(status string) error {
 		if client.isActive {
 			conn := client.conn
 			_, err := conn.Write([]byte(status))
+			log.Printf("Sending status to client: %v, %s", client, status)
 			if err != nil {
 				return err
 			}
