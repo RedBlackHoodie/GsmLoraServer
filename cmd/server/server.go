@@ -405,9 +405,12 @@ func (s *Server) HandleRemoveSession(conn net.Conn, sessionId int) {
 }
 
 func (s *Server) HandleEspConnection(conn net.Conn) {
+	s.connector.SetConn(nil)
+
 	s.connector.SetConnected(true)
 	s.connector.SetIP(conn.RemoteAddr().String())
 	s.connector.SetConn(conn)
+
 	err := s.measurementHandler.EspInitializer(s.connector)
 	if err != nil {
 		log.Printf("Error initializing Esp: %v", err)
@@ -445,6 +448,7 @@ func (s *Server) SendStatus(status string) error {
 
 	if client, exists := s.clients["start-meas"]; exists {
 		client.mutex.RLock()
+		defer client.mutex.RUnlock()
 		if client.isActive {
 			conn := client.conn
 			_, err := conn.Write([]byte(status))
@@ -452,10 +456,10 @@ func (s *Server) SendStatus(status string) error {
 				return err
 			}
 		}
-		client.mutex.RUnlock()
 		return nil
 	} else if client, exists := s.clients["settings-change"]; exists {
 		client.mutex.RLock()
+		defer client.mutex.RUnlock()
 		if client.isActive {
 			conn := client.conn
 			_, err := conn.Write([]byte(status))
@@ -463,7 +467,6 @@ func (s *Server) SendStatus(status string) error {
 				return err
 			}
 		}
-		client.mutex.RUnlock()
 		return nil
 	}
 
@@ -504,7 +507,7 @@ func (s *Server) checkAndUpdateStatus() {
 
 	now := time.Now()
 
-	if !s.MasterState.LastUpdated.IsZero() && now.Sub(s.MasterState.LastUpdated) > 120*time.Second {
+	if !s.MasterState.LastUpdated.IsZero() && now.Sub(s.MasterState.LastUpdated) > 120*time.Second && s.MasterState.Status != "DISCONNECTED" {
 		log.Printf("Master статус не обновлялся более 2 минут, меняем на DISCONNECTED")
 		log.Printf("Master state before: %s, after: %s", s.MasterState, "DISCONNECTED")
 
@@ -512,15 +515,19 @@ func (s *Server) checkAndUpdateStatus() {
 		if err != nil {
 			log.Printf("Error sending master status: %v", err)
 		}
+	} else {
+		log.Printf("Timeout expired, skip changing master status, stay DISCONNECTED")
 	}
 
-	if !s.SlaveState.LastUpdated.IsZero() && now.Sub(s.SlaveState.LastUpdated) > 120*time.Second {
+	if !s.SlaveState.LastUpdated.IsZero() && now.Sub(s.SlaveState.LastUpdated) > 120*time.Second && s.SlaveState.Status != "DISCONNECTED" {
 		log.Printf("Slave статус не обновлялся более 2 минут, меняем на DISCONNECTED")
 		log.Printf("Slave state before: %s, after: %s", s.SlaveState.Status, "DISCONNECTED")
 		err := s.SendSlaveStatus("DISCONNECTED")
 		if err != nil {
 			log.Printf("Error sending master status: %v", err)
 		}
+	} else {
+		log.Printf("Timeout expired, skip changing slave status, stay DISCONNECTED")
 	}
 }
 
