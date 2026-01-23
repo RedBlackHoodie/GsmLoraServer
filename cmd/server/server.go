@@ -158,6 +158,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.updateClientInteraction(id)
 
 		case handlers.EspMessage:
+			go s.StartStatusMonitor()
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			id := "identify_esp"
@@ -176,7 +177,6 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		case handlers.UnknownMessage:
 			log.Printf("Unknown message type: %v", message)
 		case handlers.MasterStatusMessage:
-			go s.StartStatusMonitor()
 			log.Printf("New status for master: %v", msg.Status)
 			err = s.SendMasterStatus(msg.Status)
 			if err != nil {
