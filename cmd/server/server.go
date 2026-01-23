@@ -452,11 +452,6 @@ func (s *Server) SendStatus(status string) error {
 		client.mutex.RLock()
 		defer client.mutex.RUnlock()
 		if client.isActive {
-			deadline := time.Now().Add(5 * time.Second)
-			err := client.conn.SetWriteDeadline(deadline)
-			if err != nil {
-				log.Printf("Error setting write deadline: %v", err)
-			}
 			n, err := client.conn.Write([]byte(status + "\n"))
 			log.Printf("Sending status to client: %v, %s", client, status)
 			if err != nil {
