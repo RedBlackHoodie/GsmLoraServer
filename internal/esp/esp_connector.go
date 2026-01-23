@@ -255,7 +255,7 @@ func (e *ESPConnector) isConnectionAlive() bool {
 	}
 
 	e.Conn.SetWriteDeadline(time.Now().Add(50 * time.Millisecond))
-	_, err := e.Conn.Read([]byte{})
+	_, err := e.Conn.Write([]byte{})
 	e.Conn.SetWriteDeadline(time.Time{})
 
 	if err != nil {

@@ -60,7 +60,6 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go s.espConnector.MaintainConnection()
-	//go s.espConnector.MaintainConnection(s.handleESPData)
 	return nil
 }
 
