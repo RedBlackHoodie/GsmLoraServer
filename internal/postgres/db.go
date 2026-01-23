@@ -216,11 +216,11 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 	return sessions, nil
 }
 
-func (r *Repo) FindById(requestId int) ([]models.Packet, error) {
+func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
 	rows, err := r.db.Query(
 		"SELECT "+
-			"request_id, rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE request_id = $1",
-		requestId,
+			"rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE session_id = $1",
+		sessionId,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

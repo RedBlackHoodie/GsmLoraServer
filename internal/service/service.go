@@ -462,3 +462,25 @@ func (s *DataService) startPendingProcessing() {
 		}
 	}
 }
+
+func (s *DataService) GetAllSessionMeasurements(sessionId int) ([]models.Packet, error) {
+	packets, err := s.Repo.FindById(sessionId)
+	if err != nil {
+		log.Printf("Error getting all measurements for session: %v", err)
+		return nil, err
+	}
+
+	return packets, nil
+}
+
+func (s *DataService) SendSessionPackets(sessionId int, packets []models.Packet) error {
+	clientConn, _ := s.FindClientConnection()
+	if clientConn == nil {
+		log.Printf("Client not connected")
+		return errors.New("client not connected")
+	}
+	for _, packet := range packets {
+		s.SendPacketToClient(clientConn, packet)
+	}
+	return nil
+}

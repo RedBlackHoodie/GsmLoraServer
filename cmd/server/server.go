@@ -341,6 +341,18 @@ func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		}
 	}()
+	go func() {
+		packets, err := s.measurementHandler.GetAllSessionMeasurements(sessionId)
+		if err != nil {
+			log.Printf("Error getting session measurements: %v", err)
+		}
+		if packets != nil {
+			err = s.measurementHandler.SendSessionPackets(sessionId, packets)
+			if err != nil {
+				log.Printf("Error sending session packets: %v", err)
+			}
+		}
+	}()
 }
 
 func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
