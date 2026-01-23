@@ -255,7 +255,7 @@ func (e *ESPConnector) isConnectionAlive() bool {
 	}
 
 	e.Conn.SetWriteDeadline(time.Now().Add(50 * time.Millisecond))
-	_, err := e.Conn.Write([]byte{})
+	_, err := e.Conn.Read([]byte{})
 	e.Conn.SetWriteDeadline(time.Time{})
 
 	if err != nil {
@@ -266,32 +266,11 @@ func (e *ESPConnector) isConnectionAlive() bool {
 }
 
 func (e *ESPConnector) forceClose() {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
 	if e.Conn != nil {
 		e.Conn.Close()
 		e.Conn = nil
 		e.isConnected = false
 	}
 }
-
-//func (e *ESPConnector) ListeningStart(dataHandler func(string)) error {
-//	scanner := bufio.NewScanner(e.Conn)
-//	log.Printf("Listening on ESP32...")
-//	for scanner.Scan() {
-//		message := scanner.Text()
-//		if message == "" {
-//			continue
-//		}
-//		if strings.HasPrefix(message, "ACK") {
-//			log.Printf("ACK: %s", message)
-//		}
-//		log.Printf("Received message from ESP32: %s", message)
-//		dataHandler(message)
-//	}
-//	if err := scanner.Err(); err != nil {
-//		log.Println("Error reading:", err.Error())
-//		return err
-//	}
-//	return nil
-//}
