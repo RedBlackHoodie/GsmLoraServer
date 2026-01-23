@@ -436,7 +436,7 @@ func (s *Server) SendMasterStatus(status string) error {
 	s.MasterState.LastUpdated = time.Now()
 	log.Printf("Sending master status: %v, %s, conn: %s", s.MasterState.Status, s.MasterState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
 
-	return s.SendStatus("MASTER_STATUS " + status)
+	return s.SendStatus("MASTER_STATUS " + s.MasterState.Status)
 }
 
 func (s *Server) SendSlaveStatus(status string) error {
@@ -450,9 +450,9 @@ func (s *Server) SendSlaveStatus(status string) error {
 		s.SlaveState.Status = "DISCONNECTED"
 	}
 	s.SlaveState.LastUpdated = time.Now()
-	log.Printf("Sending slave status: %v, %s, conn: %s", s.MasterState.Status, s.MasterState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
+	log.Printf("Sending slave status: %v, %s, conn: %s", s.SlaveState.Status, s.SlaveState.LastUpdated, s.clients["get-sessions"].conn.RemoteAddr().String())
 
-	return s.SendStatus("SLAVE_STATUS " + status)
+	return s.SendStatus("SLAVE_STATUS " + s.SlaveState.Status)
 }
 
 func (s *Server) SendStatus(status string) error {
