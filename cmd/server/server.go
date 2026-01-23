@@ -499,7 +499,7 @@ func (c *Client) isConnectionAlive() bool {
 
 func (s *Server) StartStatusMonitor() {
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(15 * time.Second)
 		defer ticker.Stop()
 
 		for range ticker.C {
