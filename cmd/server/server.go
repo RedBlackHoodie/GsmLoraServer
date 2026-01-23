@@ -434,7 +434,7 @@ func (s *Server) SendMasterStatus(status string) error {
 
 func (s *Server) SendSlaveStatus(status string) error {
 	if s.clients == nil {
-		log.Printf("No clients connected, skip sending master status")
+		log.Printf("No clients connected, skip sending slave status")
 		return nil
 	}
 
@@ -446,18 +446,7 @@ func (s *Server) SendSlaveStatus(status string) error {
 
 func (s *Server) SendStatus(status string) error {
 
-	if client, exists := s.clients["start-meas"]; exists {
-		client.mutex.RLock()
-		defer client.mutex.RUnlock()
-		if client.isActive {
-			conn := client.conn
-			_, err := conn.Write([]byte(status))
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	} else if client, exists := s.clients["settings-change"]; exists {
+	if client, exists := s.clients["settings-change"]; exists {
 		client.mutex.RLock()
 		defer client.mutex.RUnlock()
 		if client.isActive {
