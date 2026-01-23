@@ -158,7 +158,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.updateClientInteraction(id)
 
 		case handlers.EspMessage:
-			go s.StartStatusMonitor()
+			once := sync.Once{}
+			once.Do(func() { go s.StartStatusMonitor() })
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			log.Printf("New status for master: %v", "CONNECTED")
@@ -504,7 +505,8 @@ func (s *Server) checkAndUpdateStatus() {
 	now := time.Now()
 
 	if !s.MasterState.LastUpdated.IsZero() && now.Sub(s.MasterState.LastUpdated) > 120*time.Second {
-		log.Printf("Master статус не обновлялся более 2 минут, меняем на disabled")
+		log.Printf("Master статус не обновлялся более 2 минут, меняем на DISCONNECTED")
+		log.Printf("Master state before: %s, after: %s", s.MasterState, "DISCONNECTED")
 
 		err := s.SendMasterStatus("DISCONNECTED")
 		if err != nil {
@@ -513,7 +515,8 @@ func (s *Server) checkAndUpdateStatus() {
 	}
 
 	if !s.SlaveState.LastUpdated.IsZero() && now.Sub(s.SlaveState.LastUpdated) > 120*time.Second {
-		log.Printf("Slave статус не обновлялся более 2 минут, меняем на disabled")
+		log.Printf("Slave статус не обновлялся более 2 минут, меняем на DISCONNECTED")
+		log.Printf("Slave state before: %s, after: %s", s.SlaveState.Status, "DISCONNECTED")
 		err := s.SendSlaveStatus("DISCONNECTED")
 		if err != nil {
 			log.Printf("Error sending master status: %v", err)
