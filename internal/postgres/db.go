@@ -80,6 +80,15 @@ func (r *Repo) CreatePacketsTable() error {
 		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
 		)
 	`)
+
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(`
+        CREATE INDEX IF NOT EXISTS idx_packets_session_measurement 
+        ON packets (session_id, measurement_id)
+    `)
+
 	if err != nil {
 		return err
 	}
@@ -237,11 +246,20 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 }
 
 func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
-	rows, err := r.db.Query(
-		"SELECT "+
-			"rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE session_id = $1",
-		sessionId,
-	)
+	rows, err := r.db.Query(`
+        SELECT 
+            AVG(rssi) as avg_rssi,
+            AVG(snrl) as avg_snrl,
+            AVG(latitude) as avg_latitude,
+            AVG(longitude) as avg_longitude,
+            AVG(hdop) as avg_hdop,
+            MAX(timestamp) as last_timestamp,
+        FROM packets 
+        WHERE session_id = $1
+        GROUP BY measurement_id
+        ORDER BY measurement_id
+    `, sessionId)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return []models.Packet{}, ErrNotFound

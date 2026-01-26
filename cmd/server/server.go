@@ -340,7 +340,6 @@ func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
-			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		}
 	}()
 }
@@ -350,7 +349,6 @@ func (s *Server) handleStartMeasurement(conn net.Conn, sessionId int) {
 		err := s.connector.SendCommand("START_MEASUREMENT", sessionId)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
-			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 		}
 	}()
 	go func() {
@@ -372,7 +370,6 @@ func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 		sessions, err := s.measurementHandler.GetAllSessions()
 		if err != nil {
 			log.Printf("Error getting sessions: %v", err)
-			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 		var parts []string
