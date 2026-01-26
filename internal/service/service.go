@@ -181,10 +181,6 @@ func (s *DataService) handleESPData(data string) {
 		s.onEspConnected()
 		return
 	}
-	//err := s.ProcessPacketData(data)
-	//if err != nil {
-	//	log.Printf("Error processing packet data to chan: %v", err)
-	//}
 }
 
 func (s *DataService) processPackets() {
@@ -197,14 +193,84 @@ func (s *DataService) processPackets() {
 		s.isProcessing = false
 		s.mu.Unlock()
 	}()
+	packetBuffers := make(map[int][]*models.Packet)
+
 	for packet := range s.packetChan {
 		err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Error saving packet during processing: %v", err)
 		}
-		clientConn, _ := s.FindClientConnection()
-		s.SendPacketToClient(clientConn, *packet)
+		for measurementId, buffer := range packetBuffers {
+			if measurementId != packet.MeasurementId {
+				avgPacket := calculateAverage(buffer)
+				if avgPacket != nil {
+					clientConn, _ := s.FindClientConnection()
+					if clientConn != nil {
+						s.SendPacketToClient(clientConn, *avgPacket)
+					}
+				}
+				delete(packetBuffers, measurementId)
+			}
+		}
+		if _, exists := packetBuffers[packet.MeasurementId]; !exists {
+			packetBuffers[packet.MeasurementId] = make([]*models.Packet, 10)
+		}
+		if packet.PacketNum < 1 || packet.PacketNum > 10 {
+			log.Printf("Invalid packet_num: %d for measurement_id: %d", packet.PacketNum, packet.MeasurementId)
+			continue
+		}
+		packetBuffers[packet.MeasurementId][packet.PacketNum-1] = packet
+		if isBufferFull(packetBuffers[packet.MeasurementId]) {
+			avgPacket := calculateAverage(packetBuffers[packet.MeasurementId])
+
+			clientConn, _ := s.FindClientConnection()
+			if avgPacket != nil && clientConn != nil {
+				s.SendPacketToClient(clientConn, *avgPacket)
+			}
+
+			delete(packetBuffers, packet.MeasurementId)
+		}
 	}
+}
+
+func isBufferFull(buffer []*models.Packet) bool {
+	for i := 0; i < 10; i++ {
+		if buffer[i] == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func calculateAverage(packets []*models.Packet) *models.Packet {
+	var sumRSSI, sumLat, sumLon, sumSNRL float64
+	var sumHdop float32
+
+	basePacket := packets[len(packets)-1]
+
+	for i := 0; i < len(packets); i++ {
+		p := packets[i]
+		sumRSSI += p.RSSI
+		sumSNRL += p.SNRL
+		sumLat += p.Coordinate.Latitude
+		sumLon += p.Coordinate.Longitude
+		sumHdop += p.Hdop
+	}
+
+	avgPacket := &models.Packet{
+		MeasurementId: basePacket.MeasurementId,
+		PacketNum:     0,
+		RSSI:          sumRSSI / float64(len(packets)),
+		SNRL:          sumSNRL / float64(len(packets)),
+		Coordinate: models.Coordinate{
+			Latitude:  sumLat / float64(len(packets)),
+			Longitude: sumLon / float64(len(packets)),
+		},
+		Hdop:      sumHdop / float32(len(packets)),
+		Timestamp: basePacket.Timestamp,
+	}
+
+	return avgPacket
 }
 
 func (s *DataService) processPendingMessages() {
@@ -392,7 +458,7 @@ func (s *DataService) SendPacketToClient(conn net.Conn, packet models.Packet) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	message := fmt.Sprintf("MEASUREMENT: [%s, %f, %f, %f, %f, %f]", packet.Timestamp, packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
+	message := fmt.Sprintf("MEASUREMENT: [%s, %f, %f, %f, %f, %f]", time.Now().String(), packet.RSSI, packet.SNRL, packet.Hdop, packet.Coordinate.Latitude, packet.Coordinate.Longitude)
 	_, err := conn.Write([]byte(message + "\n"))
 	if err != nil {
 		log.Printf("Error sending message to client: %v", err)

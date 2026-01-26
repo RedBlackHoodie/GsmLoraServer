@@ -29,14 +29,15 @@ type Client struct {
 }
 
 type Server struct {
-	clients            map[string]*Client
-	mutex              sync.RWMutex
-	measurementHandler core.MeasurementHandler
-	connector          esp.Connector
-	waitList           []net.Conn
-	waitListMutex      sync.RWMutex
-	SlaveState         DeviceStatus
-	MasterState        DeviceStatus
+	clients              map[string]*Client
+	mutex                sync.RWMutex
+	measurementHandler   core.MeasurementHandler
+	connector            esp.Connector
+	waitList             []net.Conn
+	waitListMutex        sync.RWMutex
+	SlaveState           DeviceStatus
+	MasterState          DeviceStatus
+	isMeasurementStarted bool
 }
 
 func NewServer(h core.MeasurementHandler, connector esp.Connector) *Server {
@@ -98,6 +99,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		log.Printf("Parsed message type: %T", parsedMsg)
 		switch msg := parsedMsg.(type) {
 		case handlers.SetSettingsMessage:
+			s.isMeasurementStarted = false
 			id := "settings-change"
 			log.Printf("Setting change %s", id)
 			if s.connector.IsConnected() {
@@ -118,6 +120,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			}
 
 		case handlers.StartMeasurementMessage:
+			s.isMeasurementStarted = true
 			id := "start-meas"
 			log.Printf("Starting handling measurement for %s", id)
 			if s.connector.IsConnected() {
@@ -169,6 +172,10 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			once.Do(func() { s.StartStatusMonitor() })
 		case handlers.IncomingMeasurementMessage:
 			log.Printf("Received incoming measurement: %v", msg)
+			if !s.isMeasurementStarted {
+				log.Printf("Measurement has not started, skip packet")
+				break
+			}
 			err = s.measurementHandler.ProcessPacketData(msg.Data)
 			id := "meas_esp"
 			s.registerClient(id, conn)
@@ -376,13 +383,11 @@ func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 		sessionsStr := strings.Join(parts, ", ")
 		if err != nil {
 			log.Printf("Error joining sessions: %v", err)
-			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 		err = s.measurementHandler.SendAllSessions(conn, sessionsStr)
 		if err != nil {
 			log.Printf("Error sending sessions to client: %v", err)
-			//conn.Write([]byte("ERROR OCCURED ON SERVER: " + err.Error() + "\n"))
 			return
 		}
 	}()

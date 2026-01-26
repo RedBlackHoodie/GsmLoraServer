@@ -96,15 +96,8 @@ func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	rawData := models.Packet{}
 	if err := json.Unmarshal([]byte(response), &rawData); err != nil {
 	}
-	packet := models.Packet{}
-	packet.RequestId = rawData.RequestId
-	packet.RSSI = rawData.RSSI
-	packet.SNRL = rawData.SNRL
-	packet.Coordinate = rawData.Coordinate
-	packet.Hdop = rawData.Hdop
-	packet.Timestamp = rawData.Timestamp
 
-	return packet, nil
+	return rawData, nil
 }
 
 type Message interface {

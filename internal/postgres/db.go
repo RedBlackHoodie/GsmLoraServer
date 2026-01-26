@@ -68,11 +68,13 @@ func (r *Repo) InitTables() (error, error) {
 func (r *Repo) CreatePacketsTable() error {
 	_, err := r.db.Exec(`
 		CREATE TABLE IF NOT EXISTS packets (
-			request_id SERIAL PRIMARY KEY,
-			rssi INTEGER NOT NULL,
+			id SERIAL PRIMARY KEY,
+			measurement_id INTEGER NOT NULL,
+			packet_num INTEGER NOT NULL,
+			rssi FLOAT NOT NULL,
 			snrl DOUBLE PRECISION NOT NULL,
-			latitude INTEGER NOT NULL,
-			longitude INTEGER NOT NULL,
+			latitude FLOAT NOT NULL,
+			longitude FLOAT NOT NULL,
 			hdop DOUBLE PRECISION NOT NULL,
 			timestamp VARCHAR(55) NOT NULL,
 		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
@@ -153,7 +155,9 @@ func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"(rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7)", /*request_id,*/
+		"(id, measurement_id, packet_num, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values (DEFAULT,$1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		packet.MeasurementId,
+		packet.PacketNum,
 		packet.RSSI,
 		packet.SNRL,
 		packet.Coordinate.Latitude,

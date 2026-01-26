@@ -39,12 +39,13 @@ type LoRaData struct {
 }
 
 type Packet struct {
-	RequestId  int        `json:"id"`
-	RSSI       float64    `json:"rssi"`
-	SNRL       float64    `json:"snrl"`
-	Coordinate Coordinate `json:"coordinate"`
-	Hdop       float32    `json:"hdop"`
-	Timestamp  string     `json:"timestamp"`
+	MeasurementId int        `json:"id"`
+	PacketNum     int        `json:"packet_number"`
+	RSSI          float64    `json:"rssi"`
+	SNRL          float64    `json:"snrl"`
+	Coordinate    Coordinate `json:"coordinate"`
+	Hdop          float32    `json:"hdop"`
+	Timestamp     string     `json:"timestamp"`
 }
 
 type Params struct {
