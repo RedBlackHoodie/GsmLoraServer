@@ -119,7 +119,11 @@ func (r *Repo) CreateCountingTrigger() error {
         RETURNS TRIGGER AS $$
         BEGIN
             UPDATE sessions 
-            SET count = count + 1 
+            SET count = (
+                SELECT COUNT(DISTINCT measurement_id) 
+                FROM packets 
+                WHERE session_id = NEW.session_id
+            )
             WHERE id = NEW.session_id;
             RETURN NEW;
         END;
@@ -128,11 +132,10 @@ func (r *Repo) CreateCountingTrigger() error {
 	if err != nil {
 		return fmt.Errorf("failed to create trigger function: %w", err)
 	}
-
 	_, err = r.db.Exec(`
         DROP TRIGGER IF EXISTS increment_session_count ON packets;
         CREATE TRIGGER increment_session_count
-        AFTER INSERT ON packets
+        AFTER INSERT OR DELETE ON packets
         FOR EACH ROW
         EXECUTE FUNCTION update_session_count();
     `)
