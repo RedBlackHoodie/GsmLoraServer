@@ -145,6 +145,12 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		case handlers.GetMeasurementSessionsMessage: //esp not used here
 			s.HandleGetMeasurementSessions(conn)
 			id := "get-sessions"
+			if s.MasterState.Status != "" {
+				err = s.SendMasterStatus(s.MasterState.Status)
+				if err != nil {
+					log.Printf("Error sending master status: %v", err)
+				}
+			}
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
 
@@ -165,7 +171,9 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.HandleEspConnection(conn)
 			log.Printf("New status for master: %v", "CONNECTED")
 			if s.clients["get-sessions"] != nil {
-				err = s.SendMasterStatus("CONNECTED")
+				err = s.SendMasterStatus("ISALIVE")
+			} else {
+				s.MasterState.Status = "ISALIVE"
 			}
 			id := "identify_esp"
 			s.registerClient(id, conn)
@@ -186,7 +194,9 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			log.Printf("Received ack message: %v", msg)
 			log.Printf("New status for master: %v", "CONNECTED")
 			if s.clients["get-sessions"] != nil {
-				err = s.SendMasterStatus("CONNECTED")
+				err = s.SendMasterStatus("ISALIVE")
+			} else {
+				s.MasterState.Status = "ISALIVE"
 			}
 		case handlers.ErrMessage:
 			log.Printf("Received err message from master: %v", msg)
@@ -196,6 +206,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			log.Printf("New status for master: %v", msg.Status)
 			if s.clients["get-sessions"] != nil {
 				err = s.SendMasterStatus(msg.Status)
+			} else {
+				s.MasterState.Status = msg.Status
 			}
 			if err != nil {
 				log.Printf("Error sending master status: %v", err)
