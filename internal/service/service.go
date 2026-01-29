@@ -194,14 +194,23 @@ func (s *DataService) processPackets() {
 		s.mu.Unlock()
 	}()
 	packetBuffers := make(map[int][]*models.Packet)
+	currentId := -1
 
 	for packet := range s.packetChan {
 		err := s.Repo.Save(packet, s.espConnector.CurrentSession)
 		if err != nil {
 			log.Printf("Error saving packet during processing: %v", err)
 		}
-		for measurementId, buffer := range packetBuffers {
-			if measurementId != packet.MeasurementId {
+		if packet.PacketNum < 1 || packet.PacketNum > 10 {
+			log.Printf("Invalid packet_num: %d for measurement_id: %d", packet.PacketNum, packet.MeasurementId)
+			continue
+		}
+		if currentId == -1 {
+			currentId = packet.MeasurementId
+			packetBuffers[currentId] = make([]*models.Packet, 10)
+		} else if currentId != packet.MeasurementId {
+			buffer, exists := packetBuffers[currentId]
+			if exists && len(buffer) > 0 {
 				avgPacket := calculateAverage(buffer)
 				if avgPacket != nil {
 					clientConn, _ := s.FindClientConnection()
@@ -209,17 +218,15 @@ func (s *DataService) processPackets() {
 						s.SendPacketToClient(clientConn, *avgPacket)
 					}
 				}
-				delete(packetBuffers, packet.MeasurementId)
+				delete(packetBuffers, currentId)
 			}
+			currentId = packet.MeasurementId
 		}
-		if _, exists := packetBuffers[packet.MeasurementId]; !exists {
-			packetBuffers[packet.MeasurementId] = make([]*models.Packet, 10)
+
+		if _, exists := packetBuffers[currentId]; !exists {
+			packetBuffers[currentId] = make([]*models.Packet, 10)
 		}
-		if packet.PacketNum < 1 || packet.PacketNum > 10 {
-			log.Printf("Invalid packet_num: %d for measurement_id: %d", packet.PacketNum, packet.MeasurementId)
-			continue
-		}
-		packetBuffers[packet.MeasurementId][packet.PacketNum-1] = packet
+		packetBuffers[currentId] = append(packetBuffers[currentId], packet)
 		if isBufferFull(packetBuffers[packet.MeasurementId]) {
 			avgPacket := calculateAverage(packetBuffers[packet.MeasurementId])
 
