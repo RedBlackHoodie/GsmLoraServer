@@ -77,7 +77,7 @@ func (r *Repo) CreatePacketsTable() error {
 			longitude FLOAT NOT NULL,
 			hdop DOUBLE PRECISION NOT NULL,
 			timestamp VARCHAR(55) NOT NULL,
-		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
+		    session_id BIGINT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
 		)
 	`)
 
