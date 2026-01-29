@@ -209,7 +209,7 @@ func (s *DataService) processPackets() {
 						s.SendPacketToClient(clientConn, *avgPacket)
 					}
 				}
-				delete(packetBuffers, measurementId)
+				delete(packetBuffers, packet.MeasurementId)
 			}
 		}
 		if _, exists := packetBuffers[packet.MeasurementId]; !exists {

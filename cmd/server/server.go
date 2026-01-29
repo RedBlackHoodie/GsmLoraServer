@@ -164,7 +164,9 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			log.Printf("Esp message received: %v", msg)
 			s.HandleEspConnection(conn)
 			log.Printf("New status for master: %v", "CONNECTED")
-			err = s.SendMasterStatus("CONNECTED")
+			if s.clients["get-sessions"] != nil {
+				err = s.SendMasterStatus("CONNECTED")
+			}
 			id := "identify_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
@@ -183,14 +185,18 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		case handlers.AckMessage:
 			log.Printf("Received ack message: %v", msg)
 			log.Printf("New status for master: %v", "CONNECTED")
-			err = s.SendMasterStatus("CONNECTED")
+			if s.clients["get-sessions"] != nil {
+				err = s.SendMasterStatus("CONNECTED")
+			}
 		case handlers.ErrMessage:
 			log.Printf("Received err message from master: %v", msg)
 		case handlers.UnknownMessage:
 			log.Printf("Unknown message type: %v", message)
 		case handlers.MasterStatusMessage:
 			log.Printf("New status for master: %v", msg.Status)
-			err = s.SendMasterStatus(msg.Status)
+			if s.clients["get-sessions"] != nil {
+				err = s.SendMasterStatus(msg.Status)
+			}
 			if err != nil {
 				log.Printf("Error sending master status: %v", err)
 			}
