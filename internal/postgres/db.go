@@ -253,7 +253,7 @@ func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
             AVG(latitude) as avg_latitude,
             AVG(longitude) as avg_longitude,
             AVG(hdop) as avg_hdop,
-            MAX(timestamp) as last_timestamp,
+            MAX(timestamp) as last_timestamp
         FROM packets 
         WHERE session_id = $1
         GROUP BY measurement_id
@@ -261,9 +261,7 @@ func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
     `, sessionId)
 
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return []models.Packet{}, ErrNotFound
-		}
+		return nil, err
 	}
 	defer rows.Close()
 	var packets []models.Packet
