@@ -145,14 +145,14 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		case handlers.GetMeasurementSessionsMessage: //esp not used here
 			s.HandleGetMeasurementSessions(conn)
 			id := "get-sessions"
+			s.registerClient(id, conn)
+			s.updateClientInteraction(id)
 			if s.MasterState.Status != "" {
 				err = s.SendMasterStatus(s.MasterState.Status)
 				if err != nil {
 					log.Printf("Error sending master status: %v", err)
 				}
 			}
-			s.registerClient(id, conn)
-			s.updateClientInteraction(id)
 
 		case handlers.AddSessionMessage: //esp not used here
 			s.HandleAddSession(conn, msg.Session)
