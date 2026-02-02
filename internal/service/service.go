@@ -254,8 +254,6 @@ func calculateAverage(packets []*models.Packet) *models.Packet {
 	var sumHdop float32
 	count := 0
 
-	basePacket := packets[len(packets)-1]
-
 	for i := 0; i < len(packets); i++ {
 		p := packets[i]
 		if p == nil {
@@ -269,6 +267,8 @@ func calculateAverage(packets []*models.Packet) *models.Packet {
 		sumLon += p.Coordinate.Longitude
 		sumHdop += p.Hdop
 	}
+
+	basePacket := packets[count-1]
 
 	avgPacket := &models.Packet{
 		MeasurementId: basePacket.MeasurementId,
