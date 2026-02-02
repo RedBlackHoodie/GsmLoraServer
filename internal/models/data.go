@@ -42,7 +42,7 @@ type Packet struct {
 	MeasurementId int        `json:"id"`
 	PacketNum     int        `json:"packet_number"`
 	RSSI          float64    `json:"rssi"`
-	SNRL          float64    `json:"snrl"`
+	SNRL          float64    `json:"snr"`
 	Coordinate    Coordinate `json:"coordinate"`
 	Hdop          float32    `json:"hdop"`
 	Timestamp     string     `json:"timestamp"`

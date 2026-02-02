@@ -273,13 +273,13 @@ func calculateAverage(packets []*models.Packet) *models.Packet {
 	avgPacket := &models.Packet{
 		MeasurementId: basePacket.MeasurementId,
 		PacketNum:     0,
-		RSSI:          sumRSSI / float64(len(packets)),
-		SNRL:          sumSNRL / float64(len(packets)),
+		RSSI:          sumRSSI / float64(count),
+		SNRL:          sumSNRL / float64(count),
 		Coordinate: models.Coordinate{
-			Latitude:  sumLat / float64(len(packets)),
-			Longitude: sumLon / float64(len(packets)),
+			Latitude:  sumLat / float64(count),
+			Longitude: sumLon / float64(count),
 		},
-		Hdop:      sumHdop / float32(len(packets)),
+		Hdop:      sumHdop / float32(count),
 		Timestamp: basePacket.Timestamp,
 	}
 
