@@ -226,7 +226,7 @@ func (s *DataService) processPackets() {
 		if _, exists := packetBuffers[currentId]; !exists {
 			packetBuffers[currentId] = make([]*models.Packet, 10)
 		}
-		packetBuffers[currentId] = append(packetBuffers[currentId], packet)
+		packetBuffers[currentId][packet.PacketNum-1] = packet
 		if isBufferFull(packetBuffers[currentId]) {
 			avgPacket := calculateAverage(packetBuffers[currentId])
 
@@ -252,11 +252,17 @@ func isBufferFull(buffer []*models.Packet) bool {
 func calculateAverage(packets []*models.Packet) *models.Packet {
 	var sumRSSI, sumLat, sumLon, sumSNRL float64
 	var sumHdop float32
+	count := 0
 
 	basePacket := packets[len(packets)-1]
 
 	for i := 0; i < len(packets); i++ {
 		p := packets[i]
+		if p == nil {
+			log.Printf("Packet is somehow nil")
+			continue
+		}
+		count++
 		sumRSSI += p.RSSI
 		sumSNRL += p.SNRL
 		sumLat += p.Coordinate.Latitude

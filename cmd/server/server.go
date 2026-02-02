@@ -133,7 +133,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 				log.Printf("Client %s waiting for esp connection, ", id)
 				s.measurementHandler.AddPendingMessage(message, models.Lora, handlers.StartMeasurementMessage{})
 				go func() {
-					err := s.waitForEspConnection(conn)
+					err = s.waitForEspConnection(conn)
 					if err != nil {
 						log.Printf("Error waiting for esp connection: %v", err)
 					}
