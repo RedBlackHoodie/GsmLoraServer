@@ -56,7 +56,7 @@ func (s *DataService) EspInitializer(connector esp.Connector) error {
 	}
 	if !s.espConnector.IsConnected() {
 		log.Printf("esp is not connected while initializing service")
-		return errors.New("ESP_NOT_CONNECTED_WHILE_INITALIZING_SERVICE")
+		return errors.New("ESP_NOT_CONNECTED_WHILE_INITIALIZING_SERVICE")
 	}
 	s.clients[s.espConnector.Conn] = models.Lora
 	go s.espConnector.MaintainConnection()
@@ -227,15 +227,15 @@ func (s *DataService) processPackets() {
 			packetBuffers[currentId] = make([]*models.Packet, 10)
 		}
 		packetBuffers[currentId] = append(packetBuffers[currentId], packet)
-		if isBufferFull(packetBuffers[packet.MeasurementId]) {
-			avgPacket := calculateAverage(packetBuffers[packet.MeasurementId])
+		if isBufferFull(packetBuffers[currentId]) {
+			avgPacket := calculateAverage(packetBuffers[currentId])
 
 			clientConn, _ := s.FindClientConnection()
 			if avgPacket != nil && clientConn != nil {
 				s.SendPacketToClient(clientConn, *avgPacket)
 			}
 
-			delete(packetBuffers, packet.MeasurementId)
+			delete(packetBuffers, currentId)
 		}
 	}
 }
