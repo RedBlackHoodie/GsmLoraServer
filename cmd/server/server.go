@@ -153,6 +153,12 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 					log.Printf("Error sending master status: %v", err)
 				}
 			}
+			if s.SlaveState.Status != "" {
+				err = s.SendSlaveStatus(s.SlaveState.Status)
+				if err != nil {
+					log.Printf("Error sending slave status: %v", err)
+				}
+			}
 
 		case handlers.AddSessionMessage: //esp not used here
 			s.HandleAddSession(conn, msg.Session)
@@ -214,9 +220,13 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			}
 		case handlers.SlaveStatusMessage:
 			log.Printf("New status for slave: %v", msg.Status)
-			err = s.SendSlaveStatus(msg.Status)
-			if err != nil {
-				log.Printf("Error sending master status: %v", err)
+			if s.clients["get-sessions"] != nil {
+				err = s.SendSlaveStatus(msg.Status)
+				if err != nil {
+					log.Printf("Error sending slave status: %v", err)
+				}
+			} else {
+				s.SlaveState.Status = msg.Status
 			}
 		default:
 			log.Printf("Unhandled message type: %T", msg)
