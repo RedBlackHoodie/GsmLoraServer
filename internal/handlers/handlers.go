@@ -95,8 +95,9 @@ func (p *LoraParser) ParseLoraData(response string) error {
 func (p *PacketParser) ParsePacketData(response string) (models.Packet, error) {
 	rawData := models.Packet{}
 	if err := json.Unmarshal([]byte(response), &rawData); err != nil {
+		return models.Packet{}, err
 	}
-
+	rawData.Timestamp = time.Now().UTC().Truncate(time.Millisecond).String()
 	return rawData, nil
 }
 
