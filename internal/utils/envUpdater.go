@@ -27,10 +27,10 @@ func UpdateEnvFile(filename, key, value string) error {
 		text = strings.TrimSpace(text) + fmt.Sprintf("\n%s=%s\n", key, value)
 	}
 
-	return os.WriteFile(filename, []byte(text), 0644)
+	return os.WriteFile(filename, []byte(text), 0600)
 }
 
 func CreateNewEnvFile(filename, key, value string) error {
 	content := fmt.Sprintf("%s=%s\n", key, value)
-	return os.WriteFile(filename, []byte(content), 0644)
+	return os.WriteFile(filename, []byte(content), 0600)
 }

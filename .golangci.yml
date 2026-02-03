@@ -1,0 +1,18 @@
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gosec
+    - gocyclo
+    - gofmt
+    - goimports
+    - unconvert
+    - ineffassign
+    - misspell
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gosec
