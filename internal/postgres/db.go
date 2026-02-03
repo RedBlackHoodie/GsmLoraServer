@@ -115,7 +115,7 @@ func (r *Repo) InitializeSessionCounts() error {
 	_, err := r.db.Exec(`
         UPDATE sessions s
         SET count = COALESCE(
-            (SELECT COUNT(*) FROM packets p WHERE p.session_id = s.id),
+            (SELECT COUNT(DISTINCT measurement_id) FROM packets p WHERE p.session_id = s.id),
             0
         );
     `)
