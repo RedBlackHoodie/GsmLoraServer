@@ -68,16 +68,27 @@ func (r *Repo) InitTables() (error, error) {
 func (r *Repo) CreatePacketsTable() error {
 	_, err := r.db.Exec(`
 		CREATE TABLE IF NOT EXISTS packets (
-			request_id SERIAL PRIMARY KEY,
-			rssi INTEGER NOT NULL,
+			id SERIAL PRIMARY KEY,
+			measurement_id INTEGER NOT NULL,
+			packet_num INTEGER NOT NULL,
+			rssi FLOAT NOT NULL,
 			snrl DOUBLE PRECISION NOT NULL,
-			latitude INTEGER NOT NULL,
-			longitude INTEGER NOT NULL,
+			latitude FLOAT NOT NULL,
+			longitude FLOAT NOT NULL,
 			hdop DOUBLE PRECISION NOT NULL,
 			timestamp VARCHAR(55) NOT NULL,
-		    session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
+		    session_id BIGINT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
 		)
 	`)
+
+	if err != nil {
+		return err
+	}
+	_, err = r.db.Exec(`
+        CREATE INDEX IF NOT EXISTS idx_packets_session_measurement 
+        ON packets (session_id, measurement_id)
+    `)
+
 	if err != nil {
 		return err
 	}
@@ -104,7 +115,7 @@ func (r *Repo) InitializeSessionCounts() error {
 	_, err := r.db.Exec(`
         UPDATE sessions s
         SET count = COALESCE(
-            (SELECT COUNT(*) FROM packets p WHERE p.session_id = s.id),
+            (SELECT COUNT(DISTINCT measurement_id) FROM packets p WHERE p.session_id = s.id),
             0
         );
     `)
@@ -117,7 +128,11 @@ func (r *Repo) CreateCountingTrigger() error {
         RETURNS TRIGGER AS $$
         BEGIN
             UPDATE sessions 
-            SET count = count + 1 
+            SET count = (
+                SELECT COUNT(DISTINCT measurement_id) 
+                FROM packets 
+                WHERE session_id = NEW.session_id
+            )
             WHERE id = NEW.session_id;
             RETURN NEW;
         END;
@@ -126,11 +141,10 @@ func (r *Repo) CreateCountingTrigger() error {
 	if err != nil {
 		return fmt.Errorf("failed to create trigger function: %w", err)
 	}
-
 	_, err = r.db.Exec(`
         DROP TRIGGER IF EXISTS increment_session_count ON packets;
         CREATE TRIGGER increment_session_count
-        AFTER INSERT ON packets
+        AFTER INSERT OR DELETE ON packets
         FOR EACH ROW
         EXECUTE FUNCTION update_session_count();
     `)
@@ -153,7 +167,9 @@ func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 		id = sessionId
 	}
 	_, err = r.db.Exec("INSERT INTO PACKETS "+
-		"(rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values ($1, $2, $3, $4, $5, $6, $7)", /*request_id,*/
+		"(id, measurement_id, packet_num, rssi, snrl, latitude, longitude, hdop, timestamp, session_id) values (DEFAULT,$1, $2, $3, $4, $5, $6, $7, $8, $9)",
+		packet.MeasurementId,
+		packet.PacketNum,
 		packet.RSSI,
 		packet.SNRL,
 		packet.Coordinate.Latitude,
@@ -230,15 +246,22 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 }
 
 func (r *Repo) FindById(sessionId int) ([]models.Packet, error) {
-	rows, err := r.db.Query(
-		"SELECT "+
-			"rssi, snrl, latitude, longitude, hdop, timestamp FROM packets WHERE session_id = $1",
-		sessionId,
-	)
+	rows, err := r.db.Query(`
+        SELECT 
+            AVG(rssi) as avg_rssi,
+            AVG(snrl) as avg_snrl,
+            AVG(latitude) as avg_latitude,
+            AVG(longitude) as avg_longitude,
+            AVG(hdop) as avg_hdop,
+            MAX(timestamp) as last_timestamp
+        FROM packets 
+        WHERE session_id = $1
+        GROUP BY measurement_id
+        ORDER BY measurement_id
+    `, sessionId)
+
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return []models.Packet{}, ErrNotFound
-		}
+		return nil, err
 	}
 	defer rows.Close()
 	var packets []models.Packet

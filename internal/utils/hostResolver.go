@@ -6,7 +6,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 )
 
@@ -176,12 +175,6 @@ func scanARPTable(targetMAC string) (string, error) {
 	}
 
 	return "", fmt.Errorf("MAC not found in ARP table")
-}
-
-func normalizeMAC(mac string) string {
-	re := regexp.MustCompile(`[^a-fA-F0-9]`)
-	normalized := re.ReplaceAllString(mac, "")
-	return strings.ToLower(normalized)
 }
 
 func printNetworkInfo(iface *net.Interface, ipNet *net.IPNet) {
