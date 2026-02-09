@@ -18,6 +18,12 @@ import (
 	"time"
 )
 
+type timeredBuffer struct {
+	packets []*models.Packet
+	timer   *time.Timer
+	mx      sync.Mutex
+}
+
 type PendingMessage struct {
 	Destination models.Destination
 	Type        handlers.Message
@@ -193,8 +199,18 @@ func (s *DataService) processPackets() {
 		s.isProcessing = false
 		s.mu.Unlock()
 	}()
-	packetBuffers := make(map[int][]*models.Packet)
-	currentId := -1
+	packetBuffers := make(map[int]*timeredBuffer)
+	defer func() {
+		s.mu.Lock()
+		for _, bwt := range packetBuffers {
+			if bwt != nil {
+				bwt.timer.Stop()
+			}
+		}
+		s.mu.Unlock()
+	}()
+
+	//currentId := -1
 
 	for packet := range s.packetChan {
 		err := s.Repo.Save(packet, s.espConnector.CurrentSession)
@@ -205,38 +221,97 @@ func (s *DataService) processPackets() {
 			log.Printf("Invalid packet_num: %d for measurement_id: %d", packet.PacketNum, packet.MeasurementId)
 			continue
 		}
-		if currentId == -1 {
-			currentId = packet.MeasurementId
-			packetBuffers[currentId] = make([]*models.Packet, 10)
-		} else if currentId != packet.MeasurementId {
-			buffer, exists := packetBuffers[currentId]
-			if exists && len(buffer) > 0 {
-				avgPacket := calculateAverage(buffer)
-				if avgPacket != nil {
-					clientConn, _ := s.FindClientConnection()
-					if clientConn != nil {
-						s.SendPacketToClient(clientConn, *avgPacket)
-					}
-				}
-				delete(packetBuffers, currentId)
+		buf, exists := packetBuffers[packet.MeasurementId]
+		if !exists {
+			packetBuffers[packet.MeasurementId] = &timeredBuffer{
+				packets: make([]*models.Packet, 0),
+				mx:      sync.Mutex{},
 			}
-			currentId = packet.MeasurementId
+			packetBuffers[packet.MeasurementId] = buf
+			buf.timer = time.AfterFunc(15*time.Second, func() {
+				s.mu.Lock()
+				defer s.mu.Unlock()
+				if buf, ok := packetBuffers[packet.MeasurementId]; ok {
+					s.mu.Lock()
+					defer s.mu.Unlock()
+					if buf.packets != nil && !isBufferFull(buf.packets) {
+						avgPacket := calculateAverage(buf.packets)
+						if avgPacket != nil {
+							clientConn, _ := s.FindClientConnection()
+							if clientConn != nil {
+								s.SendPacketToClient(clientConn, *avgPacket)
+							}
+						}
+					}
+					buf.mx.Unlock()
+					if buf.timer != nil {
+						buf.timer.Stop()
+					}
+					delete(packetBuffers, packet.MeasurementId)
+				}
+			})
+		} else {
+			buf.mx.Lock()
+			buf.timer.Stop()
+			buf.timer.Reset(15 * time.Second)
+			buf.mx.Unlock()
 		}
 
-		if _, exists := packetBuffers[currentId]; !exists {
-			packetBuffers[currentId] = make([]*models.Packet, 10)
-		}
-		packetBuffers[currentId][packet.PacketNum-1] = packet
-		if isBufferFull(packetBuffers[currentId]) {
-			avgPacket := calculateAverage(packetBuffers[currentId])
+		buf.mx.Lock()
+		buf.packets[packet.PacketNum-1] = packet
+		buf.mx.Unlock()
+
+		buf.mx.Lock()
+		full := isBufferFull(buf.packets)
+		buf.mx.Unlock()
+		if full {
+			avgPacket := calculateAverage(buf.packets)
 
 			clientConn, _ := s.FindClientConnection()
 			if avgPacket != nil && clientConn != nil {
 				s.SendPacketToClient(clientConn, *avgPacket)
 			}
 
-			delete(packetBuffers, currentId)
+			buf.mx.Lock()
+			if buf.timer != nil {
+				buf.timer.Stop()
+			}
+			buf.mx.Unlock()
+
+			delete(packetBuffers, packet.MeasurementId)
 		}
+		//	if currentId == -1 {
+		//		currentId = packet.MeasurementId
+		//		packetBuffers[currentId] = make([]*timeredBuffer, 10)
+		//	} else if currentId != packet.MeasurementId {
+		//		buffer, exists := packetBuffers[currentId]
+		//		if exists && len(buffer) > 0 {
+		//			avgPacket := calculateAverage(buffer)
+		//			if avgPacket != nil {
+		//				clientConn, _ := s.FindClientConnection()
+		//				if clientConn != nil {
+		//					s.SendPacketToClient(clientConn, *avgPacket)
+		//				}
+		//			}
+		//			delete(packetBuffers, currentId)
+		//		}
+		//		currentId = packet.MeasurementId
+		//	}
+		//
+		//	if _, exists := packetBuffers[currentId]; !exists {
+		//		packetBuffers[currentId] = make([]*models.Packet, 10)
+		//	}
+		//	packetBuffers[currentId][packet.PacketNum-1] = packet
+		//	if isBufferFull(packetBuffers[currentId]) {
+		//		avgPacket := calculateAverage(packetBuffers[currentId])
+		//
+		//		clientConn, _ := s.FindClientConnection()
+		//		if avgPacket != nil && clientConn != nil {
+		//			s.SendPacketToClient(clientConn, *avgPacket)
+		//		}
+		//
+		//		delete(packetBuffers, currentId)
+		//	}
 	}
 }
 
