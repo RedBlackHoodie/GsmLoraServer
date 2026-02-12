@@ -203,7 +203,7 @@ func (s *DataService) processPackets() {
 	defer func() {
 		s.mu.Lock()
 		for _, bwt := range packetBuffers {
-			if bwt != nil {
+			if bwt != nil && bwt.timer != nil {
 				bwt.timer.Stop()
 			}
 		}
@@ -224,7 +224,7 @@ func (s *DataService) processPackets() {
 		buf, exists := packetBuffers[packet.MeasurementId]
 		if !exists {
 			packetBuffers[packet.MeasurementId] = &timeredBuffer{
-				packets: make([]*models.Packet, 0),
+				packets: make([]*models.Packet, 10),
 				mx:      sync.Mutex{},
 			}
 			packetBuffers[packet.MeasurementId] = buf
