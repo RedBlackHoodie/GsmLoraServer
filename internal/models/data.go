@@ -20,8 +20,8 @@ func (d Destination) String() string {
 }
 
 type Coordinate struct {
-	Latitude  float64
-	Longitude float64
+	Latitude  float64 `json:"latitude,string"`
+	Longitude float64 `json:"longitude,string"`
 }
 
 type GPSData struct {
