@@ -338,7 +338,7 @@ func (r *Repo) AddSettingsToSession(sessionId int, sf, tx, bw float32) error {
 	return nil
 }
 
-func (r *Repo) CheckSettings(sessionId int) (bool, error) {
+func (r *Repo) CheckSettings(sessionId int) (bool, bool, error) {
 	var sf, bw, tx float64
 	err := r.db.QueryRow(`
         SELECT sf, bw, tx 
@@ -346,10 +346,17 @@ func (r *Repo) CheckSettings(sessionId int) (bool, error) {
         WHERE id = $1 
           AND (sf IS NOT NULL OR bw IS NOT NULL OR tx IS NOT NULL)
     `, sessionId).Scan(&sf, &bw, &tx)
+	cnt := 0
+	err1 := r.db.QueryRow(`SELECT count FROM packets WHERE session_id = $1`, sessionId).Scan(&cnt)
+
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
+			return false, cnt > 0, nil
 		}
 	}
-	return false, fmt.Errorf("failed to check settings: %w", err)
+	if err1 != nil {
+		return true, cnt > 0, err1
+	}
+
+	return true, cnt > 0, fmt.Errorf("failed to check settings: %w", err)
 }

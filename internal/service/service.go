@@ -126,58 +126,44 @@ func (s *DataService) DrainDataChannel() error {
 }
 
 func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
-	settingsSet, err := s.Repo.CheckSettings(s.espConnector.CurrentSession)
-	if err != nil {
-		return err
+	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+	parts := strings.Split(cleanedMessage, ", ")
+	s.clients[conn] = models.Client
+
+	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+		return errors.New("ESP_NOT_CONNECTED")
 	}
-	if !settingsSet {
-		cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
-		parts := strings.Split(cleanedMessage, ", ")
-		s.clients[conn] = models.Client
 
-		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-			return errors.New("ESP_NOT_CONNECTED")
-		}
-		params := models.Params{}
+	params := models.Params{}
 
-		for _, part := range parts {
-			keyVal := strings.Split(part, "=")
-			if len(keyVal) != 2 {
-				continue
-			}
-
-			key := strings.TrimSpace(keyVal[0])
-			value := strings.TrimSpace(keyVal[1])
-
-			val, err := strconv.ParseFloat(value, 32)
-			if err != nil {
-				return fmt.Errorf("invalid value for %s: %w", key, err)
-			}
-
-			switch key {
-			case "SF":
-				params.Sf = float32(val)
-			case "TX":
-				params.Tx = float32(val)
-			case "BW":
-				params.Bandwidth = float32(val)
-			}
+	for _, part := range parts {
+		keyVal := strings.Split(part, "=")
+		if len(keyVal) != 2 {
+			continue
 		}
 
-		log.Printf("Got params: %+v\n", params)
-		err := s.Repo.AddSettingsToSession(s.espConnector.CurrentSession, params.Sf, params.Tx, params.Bandwidth)
+		key := strings.TrimSpace(keyVal[0])
+		value := strings.TrimSpace(keyVal[1])
+
+		val, err := strconv.ParseFloat(value, 32)
 		if err != nil {
-			log.Printf("Error adding settings to session: %v", err)
+			return fmt.Errorf("invalid value for %s: %w", key, err)
 		}
 
-		log.Printf("Added settings to session: %+v", s.espConnector.CurrentSession)
-
-		s.interfaceSettingsChange <- &params
-
-		return nil
-	} else {
-		return errors.New(fmt.Sprintf("Settings already set for SessionId: %d", s.espConnector.CurrentSession))
+		switch key {
+		case "SF":
+			params.Sf = float32(val)
+		case "TX":
+			params.Tx = float32(val)
+		case "BW":
+			params.Bandwidth = float32(val)
+		}
 	}
+
+	log.Printf("Got params: %+v\n", params)
+	s.interfaceSettingsChange <- &params
+
+	return nil
 }
 
 func (s *DataService) processPackets() {
@@ -626,6 +612,29 @@ func (s *DataService) SendSessionPackets(sessionId int, packets []models.Packet)
 	}
 	for _, packet := range packets {
 		s.SendPacketToClient(clientConn, packet)
+	}
+	return nil
+}
+
+func (s *DataService) SetSettingsForSession(params models.Params) error {
+	settingsSet, hasPackets, err := s.Repo.CheckSettings(s.espConnector.CurrentSession)
+	if err != nil {
+		return err
+	}
+	if settingsSet && !hasPackets {
+		log.Printf("Have settings for session: %v, but no packets - changing settings",
+			s.espConnector.CurrentSession)
+		err = s.Repo.AddSettingsToSession(s.espConnector.CurrentSession, params.Sf, params.Tx, params.Bandwidth)
+		if err != nil {
+			log.Printf("Error adding settings to session: %v", err)
+		}
+
+		log.Printf("Added settings: %+v to session: %+v", params, s.espConnector.CurrentSession)
+		return nil
+
+	} else if hasPackets {
+		log.Printf("Setting already set or already have packets for session: %v", params)
+		return errors.New("already set or already have packets for session")
 	}
 	return nil
 }

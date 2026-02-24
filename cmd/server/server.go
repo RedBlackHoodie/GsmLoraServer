@@ -199,6 +199,8 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 		case handlers.SettingsAckMessage:
 			log.Printf("Received settings ack: %v", msg)
 			err = s.SendSettingsAck(fmt.Sprintf(msg.Type()+": SF: %f, BW: %f, TX: %f", msg.Sf, msg.Bw, msg.Tx))
+			params := models.Params{Sf: msg.Sf, Tx: msg.Tx, Bandwidth: msg.Bw}
+			s.SetSettingsForSession(params)
 			if err != nil {
 				log.Printf("Error sending settings ack: %v", err)
 			}
@@ -348,9 +350,6 @@ func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 	go func() {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
-			// TODO: write settings to db only when have ack, not when received
-			log.Printf("Error processing interface request: %v", err)
-			_, err = conn.Write([]byte(fmt.Sprintf("ALREADY_SET")))
 			if err != nil {
 				log.Printf("Error sending interface request: %v", err)
 			}
@@ -560,4 +559,27 @@ func (s *Server) checkAndUpdateStatus() {
 	} else if now.Sub(s.SlaveState.LastUpdated) > 120*time.Second && s.SlaveState.Status == "DISCONNECTED" {
 		log.Printf("Timeout expired, skip changing slave status, stay DISCONNECTED")
 	}
+}
+
+func (s *Server) SetSettingsForSession(params models.Params) {
+	go func() {
+		err := s.measurementHandler.SetSettingsForSession(params)
+		if err != nil {
+			if client, exists := s.clients["get-sessions"]; exists {
+				client.mutex.RLock()
+				defer client.mutex.RUnlock()
+				if client.isActive {
+					_, err = client.conn.Write([]byte(fmt.Sprintf("ALREADY_SET")))
+					log.Printf("Error setting settings for session: %v", err)
+					if err != nil {
+						log.Printf("Connection error type: %T", err)
+						var netErr net.Error
+						if errors.As(err, &netErr) && netErr.Timeout() {
+							log.Printf("Write timeout occurred")
+						}
+					}
+				}
+			}
+		}
+	}()
 }

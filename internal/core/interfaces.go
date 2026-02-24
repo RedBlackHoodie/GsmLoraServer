@@ -41,4 +41,5 @@ type MeasurementHandler interface {
 	AddPendingMessage(message string, dest models.Destination, typ Message)
 	GetAllSessionMeasurements(sessionId int) ([]models.Packet, error)
 	SendSessionPackets(sessionId int, packets []models.Packet) error
+	SetSettingsForSession(params models.Params) error
 }
