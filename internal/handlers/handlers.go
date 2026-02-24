@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"Lora_Esp_Gsm_Gps_project/internal/core"
 	"Lora_Esp_Gsm_Gps_project/internal/models"
 	"encoding/json"
 	"errors"
@@ -129,15 +128,17 @@ type RemoveSessionMessage struct {
 
 type IncomingMeasurementMessage struct {
 	Data      models.Packet
-	sessionId int
+	SessionId int
 }
 
 type EspMessage struct{}
 
+type SettingsAckMessage struct{}
+
 type AckMessage struct{}
 
 type ErrMessage struct {
-	error string
+	Error string
 }
 
 type InitialEspConnectionMessage struct{}
@@ -165,12 +166,13 @@ func (m AckMessage) Type() string                    { return "ACK" }
 func (m ErrMessage) Type() string                    { return "ERROR" }
 func (m MasterStatusMessage) Type() string           { return "MASTER_STATUS" }
 func (m SlaveStatusMessage) Type() string            { return "SLAVE_STATUS" }
+func (m SettingsAckMessage) Type() string            { return "SETTINGS_ACK" }
 
 type GetMessage struct {
 	What string
 }
 
-func ParseClientMessage(h core.MeasurementHandler, message string) (Message, error) {
+func ParseClientMessage(message string) (Message, error) {
 	if strings.HasPrefix(message, "SET_SETTINGS") {
 		par := models.Params{}
 		_, err := fmt.Sscanf(message, "SET_SETTINGS: SF=%f, TX=%f, BW=%f", &par.Sf, &par.Tx, &par.Bandwidth)
@@ -219,15 +221,18 @@ func ParseClientMessage(h core.MeasurementHandler, message string) (Message, err
 		}
 		incoming := IncomingMeasurementMessage{
 			Data:      data,
-			sessionId: 0,
+			SessionId: 0,
 		}
 		return incoming, nil
 
-	} else if strings.Contains(message, "ACK") {
+	} else if strings.Contains(message, "ACK: SSET") {
+		return SettingsAckMessage{}, nil
+
+	} else if strings.Contains(message, "ACK:") {
 		return AckMessage{}, nil
 
 	} else if strings.Contains(message, "ERROR") {
-		return ErrMessage{error: message}, nil
+		return ErrMessage{Error: message}, nil
 
 	} else if strings.Contains(message, "MASTER_STATUS") {
 		status := strings.TrimPrefix(message, "MASTER_STATUS ")
@@ -313,7 +318,7 @@ func ParseIncomingMeasurement(message string) (IncomingMeasurementMessage, error
 	}
 	incoming := IncomingMeasurementMessage{
 		Data:      *packetParser.Data,
-		sessionId: 0,
+		SessionId: 0,
 	}
 	return incoming, nil
 }

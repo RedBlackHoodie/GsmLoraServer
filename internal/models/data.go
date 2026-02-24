@@ -55,9 +55,12 @@ type Params struct {
 }
 
 type Session struct {
-	Id        int    `json:"id"`
-	Name      string `json:"name"`
-	StartTime string `json:"start_time"`
-	EndTime   string `json:"end_time"`
-	Count     int    `json:"count"`
+	Id        int     `json:"id"`
+	Name      string  `json:"name"`
+	StartTime string  `json:"start_time"`
+	EndTime   string  `json:"end_time"`
+	Count     int     `json:"count"`
+	Sf        float32 `json:"sf"`
+	Tx        float32 `json:"tx"`
+	Bandwidth float32 `json:"bandwidth"`
 }

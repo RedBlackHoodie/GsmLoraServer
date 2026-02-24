@@ -126,66 +126,57 @@ func (s *DataService) DrainDataChannel() error {
 }
 
 func (s *DataService) ProcessInterfaceSettingChange(conn net.Conn, message string) error {
-	cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
-	parts := strings.Split(cleanedMessage, ", ")
-	s.clients[conn] = models.Client
-
-	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		return errors.New("ESP_NOT_CONNECTED")
+	settingsSet, err := s.Repo.CheckSettings(s.espConnector.CurrentSession)
+	if err != nil {
+		return err
 	}
+	if !settingsSet {
+		cleanedMessage := strings.TrimPrefix(message, "SET_SETTINGS: ")
+		parts := strings.Split(cleanedMessage, ", ")
+		s.clients[conn] = models.Client
 
-	params := models.Params{}
+		if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
+			return errors.New("ESP_NOT_CONNECTED")
+		}
+		params := models.Params{}
 
-	for _, part := range parts {
-		keyVal := strings.Split(part, "=")
-		if len(keyVal) != 2 {
-			continue
+		for _, part := range parts {
+			keyVal := strings.Split(part, "=")
+			if len(keyVal) != 2 {
+				continue
+			}
+
+			key := strings.TrimSpace(keyVal[0])
+			value := strings.TrimSpace(keyVal[1])
+
+			val, err := strconv.ParseFloat(value, 32)
+			if err != nil {
+				return fmt.Errorf("invalid value for %s: %w", key, err)
+			}
+
+			switch key {
+			case "SF":
+				params.Sf = float32(val)
+			case "TX":
+				params.Tx = float32(val)
+			case "BW":
+				params.Bandwidth = float32(val)
+			}
 		}
 
-		key := strings.TrimSpace(keyVal[0])
-		value := strings.TrimSpace(keyVal[1])
-
-		val, err := strconv.ParseFloat(value, 32)
+		log.Printf("Got params: %+v\n", params)
+		err := s.Repo.AddSettingsToSession(s.espConnector.CurrentSession, params.Sf, params.Tx, params.Bandwidth)
 		if err != nil {
-			return fmt.Errorf("invalid value for %s: %w", key, err)
+			log.Printf("Error adding settings to session: %v", err)
 		}
 
-		switch key {
-		case "SF":
-			params.Sf = float32(val)
-		case "TX":
-			params.Tx = float32(val)
-		case "BW":
-			params.Bandwidth = float32(val)
-		}
-	}
+		log.Printf("Added settings to session: %+v", s.espConnector.CurrentSession)
 
-	log.Printf("Got params: %+v\n", params)
-	s.interfaceSettingsChange <- &params
+		s.interfaceSettingsChange <- &params
 
-	return nil
-}
-
-func (s *DataService) handleESPData(data string) {
-	if s.espConnector.Conn == nil || !s.espConnector.IsConnected() {
-		log.Printf("ESP_CONNECTION UNAVAILABLE")
-		return
-	}
-	if data == "" {
-		return
-	}
-	if strings.HasPrefix(data, "ACK") {
-		log.Printf("Got ACK: %s", data)
-		return
-	}
-	if strings.HasPrefix(data, "ERROR") {
-		log.Printf("ESP Error: %s", data)
-		return
-	}
-	if strings.HasPrefix(data, "IDENTIFY") {
-		s.espConnector.SetConnected(true)
-		s.onEspConnected()
-		return
+		return nil
+	} else {
+		return errors.New(fmt.Sprintf("Settings already set for SessionId: %d", s.espConnector.CurrentSession))
 	}
 }
 
@@ -387,7 +378,7 @@ func (s *DataService) processPendingMessages() {
 				if !exist {
 					log.Printf("NO_ESP_CONNECTION FOUND")
 				}
-				msg, err := handlers.ParseClientMessage(s, pending.Message)
+				msg, err := handlers.ParseClientMessage(pending.Message)
 
 				if err != nil {
 					log.Printf("Error parsing client message: %v", err)

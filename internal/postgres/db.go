@@ -104,6 +104,9 @@ func (r *Repo) CreateSessionsTable() error {
 			start_time TIMESTAMP NOT NULL,
 			end_time TIMESTAMP,
 		    count INTEGER NOT NULL
+		    sf    FLOAT
+		    bw    FLOAT
+		    tx 	  FLOAT
 		)`)
 	if err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -208,7 +211,7 @@ func (r *Repo) RemoveSession(sessionId int) error {
 }
 
 func (r *Repo) GetAllSessions() ([]models.Session, error) {
-	rows, err := r.db.Query("SELECT id, name, start_time, end_time, count " +
+	rows, err := r.db.Query("SELECT id, name, start_time, end_time, count, sf, bw, tx " +
 		"FROM sessions")
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -227,6 +230,9 @@ func (r *Repo) GetAllSessions() ([]models.Session, error) {
 			&session.StartTime,
 			&session.EndTime,
 			&session.Count,
+			&session.Sf,
+			&session.Bandwidth,
+			&session.Tx,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan session: %w", err)
@@ -310,4 +316,40 @@ func (r *Repo) FindLastSessionId() (int, error) {
 		return 0, fmt.Errorf("failed to get last request ID: %w", err)
 	}
 	return lastSessionId, nil
+}
+
+func (r *Repo) AddSettingsToSession(sessionId int, sf, tx, bw float32) error {
+	res, err := r.db.Exec(`
+		UPDATE sessions
+		SET sf = $2, tx = $3, bw = $4
+		WHERE id = $1
+	`, sessionId, sf, tx, bw)
+	if err != nil {
+		return fmt.Errorf("failed to update session settings: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("session with id %d not found", sessionId)
+	}
+
+	return nil
+}
+
+func (r *Repo) CheckSettings(sessionId int) (bool, error) {
+	var sf, bw, tx float64
+	err := r.db.QueryRow(`
+        SELECT sf, bw, tx 
+        FROM sessions 
+        WHERE id = $1 
+          AND (sf IS NOT NULL OR bw IS NOT NULL OR tx IS NOT NULL)
+    `, sessionId).Scan(&sf, &bw, &tx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+	}
+	return false, fmt.Errorf("failed to check settings: %w", err)
 }

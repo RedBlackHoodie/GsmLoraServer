@@ -89,7 +89,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 	for scanner.Scan() {
 		message := scanner.Text()
 		log.Printf("Got message: %s", message)
-		parsedMsg, err := handlers.ParseClientMessage(s.measurementHandler, message)
+		parsedMsg, err := handlers.ParseClientMessage(message)
 
 		if err != nil {
 			log.Printf("Error parsing message: %v", err)
@@ -196,6 +196,13 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			id := "meas_esp"
 			s.registerClient(id, conn)
 			s.updateClientInteraction(id)
+		case handlers.SettingsAckMessage:
+			log.Printf("Received settings ack: %v", msg)
+			err = s.SendSettingsAck(msg.Type())
+			if err != nil {
+				log.Printf("Error sending settings ack: %v", err)
+			}
+			log.Printf("Settings ack sent")
 		case handlers.AckMessage:
 			log.Printf("Received ack message: %v", msg)
 			log.Printf("New status for master: %v", "CONNECTED")
@@ -309,14 +316,6 @@ func (s *Server) removeWaitingClient(conn net.Conn) {
 	}
 }
 
-func (s *Server) removeAllWaitingClients() {
-	s.waitListMutex.Lock()
-	defer s.waitListMutex.Unlock()
-	for _, connection := range s.waitList {
-		s.removeWaitingClient(connection)
-	}
-}
-
 func (s *Server) notifyWaitingClients() {
 	s.waitListMutex.Lock()
 	defer s.waitListMutex.Unlock()
@@ -326,24 +325,6 @@ func (s *Server) notifyWaitingClients() {
 	//}
 	s.waitList = nil
 }
-
-//func (s *Server) checkIsConnectionsAlive() {
-//	s.mutex.Lock()
-//	defer s.mutex.Unlock()
-//	for deviceID, client := range s.clients {
-//		ok := client.isConnectionAlive()
-//		if !ok {
-//			log.Printf("Client %s inactive for over 5 minutes, disconnecting", deviceID)
-//			err := client.conn.Close()
-//			if err != nil {
-//				log.Printf("Error closing connection for client %s: %v", deviceID, err)
-//				continue
-//			}
-//			delete(s.clients, deviceID)
-//			log.Printf("Unregistered inactive client: %s", deviceID)
-//		}
-//	}
-//}
 
 func (s *Server) updateClientInteraction(clientID string) {
 	s.mutex.Lock()
@@ -368,6 +349,10 @@ func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
 			log.Printf("Error processing interface request: %v", err)
+			_, err = conn.Write([]byte(fmt.Sprintf("ALREADY_SET")))
+			if err != nil {
+				log.Printf("Error sending interface request: %v", err)
+			}
 		}
 	}()
 }
@@ -510,21 +495,29 @@ func (s *Server) SendStatus(status string) error {
 	return errors.New("no interface connected")
 }
 
-func (c *Client) setInactive() {
-	c.mutex.Lock()
-	defer c.mutex.Unlock()
-	c.isActive = false
-}
-
-func (c *Client) isConnectionAlive() bool {
-	c.mutex.RLock()
-	defer c.mutex.RUnlock()
-	inter, err := handlers.ParseTime(c.lastInteraction)
-	if err != nil {
-		log.Printf("Error parsing last interaction time: %v", err)
-		return false
+func (s *Server) SendSettingsAck(msg string) error {
+	if s.clients == nil {
+		log.Printf("No clients connected, skip sending settings ack")
+		return nil
 	}
-	return c.isActive && time.Since(inter) < 5*time.Minute
+	if client, exists := s.clients["get-sessions"]; exists {
+		client.mutex.RLock()
+		defer client.mutex.RUnlock()
+		if client.isActive {
+			_, err := client.conn.Write([]byte(msg + "\n"))
+			log.Printf("Sending status to client: %v, %s", client, msg)
+			if err != nil {
+				log.Printf("Connection error type: %T", err)
+				var netErr net.Error
+				if errors.As(err, &netErr) && netErr.Timeout() {
+					log.Printf("Write timeout occurred")
+				}
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (s *Server) StartStatusMonitor() {
@@ -567,15 +560,3 @@ func (s *Server) checkAndUpdateStatus() {
 		log.Printf("Timeout expired, skip changing slave status, stay DISCONNECTED")
 	}
 }
-
-//func (s *Server) startConnectionChecker() {
-//	ticker := time.NewTicker(1 * time.Minute)
-//	defer ticker.Stop()
-//
-//	for {
-//		select {
-//		case <-ticker.C:
-//			s.checkIsConnectionsAlive()
-//		}
-//	}
-//}
