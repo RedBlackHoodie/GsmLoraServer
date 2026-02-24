@@ -348,6 +348,7 @@ func (s *Server) HandleSetSettings(conn net.Conn, message string) {
 	go func() {
 		err := s.measurementHandler.ProcessInterfaceSettingChange(conn, message)
 		if err != nil {
+			// TODO: write settings to db only when have ack, not when received
 			log.Printf("Error processing interface request: %v", err)
 			_, err = conn.Write([]byte(fmt.Sprintf("ALREADY_SET")))
 			if err != nil {
