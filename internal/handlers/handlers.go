@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -133,7 +134,11 @@ type IncomingMeasurementMessage struct {
 
 type EspMessage struct{}
 
-type SettingsAckMessage struct{}
+type SettingsAckMessage struct {
+	Sf float32
+	Tx float32
+	Bw float32
+}
 
 type AckMessage struct{}
 
@@ -226,7 +231,23 @@ func ParseClientMessage(message string) (Message, error) {
 		return incoming, nil
 
 	} else if strings.Contains(message, "ACK: SSET") {
-		return SettingsAckMessage{}, nil
+		re := regexp.MustCompile(`SF([\d.]+),BW([\d.]+),TX([\d.]+)`)
+		var sf, tx, bw float64
+		var err error
+		matches := re.FindStringSubmatch(message)
+		if matches == nil || len(matches) < 4 {
+			return nil, fmt.Errorf("не удалось найти настройки в строке: %s", message)
+		}
+		if sf, err = strconv.ParseFloat(matches[1], 32); err != nil {
+			return nil, fmt.Errorf("ошибка парсинга SF: %w", err)
+		}
+		if bw, err = strconv.ParseFloat(matches[2], 32); err != nil {
+			return nil, fmt.Errorf("ошибка парсинга BW: %w", err)
+		}
+		if tx, err = strconv.ParseFloat(matches[3], 32); err != nil {
+			return nil, fmt.Errorf("ошибка парсинга TX: %w", err)
+		}
+		return SettingsAckMessage{Sf: float32(sf), Bw: float32(bw), Tx: float32(tx)}, nil
 
 	} else if strings.Contains(message, "ACK:") {
 		return AckMessage{}, nil

@@ -198,7 +198,7 @@ func (s *Server) HandleConnection(conn net.Conn) error {
 			s.updateClientInteraction(id)
 		case handlers.SettingsAckMessage:
 			log.Printf("Received settings ack: %v", msg)
-			err = s.SendSettingsAck(msg.Type())
+			err = s.SendSettingsAck(fmt.Sprintf(msg.Type()+": SF: %f, BW: %f, TX: %f", msg.Sf, msg.Bw, msg.Tx))
 			if err != nil {
 				log.Printf("Error sending settings ack: %v", err)
 			}
