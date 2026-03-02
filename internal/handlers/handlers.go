@@ -307,9 +307,6 @@ func ParseSession(data string) (models.Session, error) {
 		return session, fmt.Errorf("invalid points: %w", err)
 	}
 	session.Count = count
-	session.Sf = 0
-	session.Bandwidth = 0
-	session.Tx = 0
 	return session, nil
 }
 

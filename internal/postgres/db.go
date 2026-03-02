@@ -104,9 +104,9 @@ func (r *Repo) CreateSessionsTable() error {
 			start_time TIMESTAMP NOT NULL,
 			end_time TIMESTAMP,
 		    count INTEGER NOT NULL,
-		    sf    FLOAT	  NOT NULL,
-		    bw    FLOAT	  NOT NULL,
-		    tx 	  FLOAT	  NOT NULL
+		    sf    FLOAT	  NOT NULL DEFAULT 0,
+		    bw    FLOAT	  NOT NULL DEFAULT 0,
+		    tx 	  FLOAT	  NOT NULL DEFAULT 0,
 		)`)
 	if err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
@@ -348,7 +348,7 @@ func (r *Repo) CheckSettings(sessionId int) (bool, bool, error) {
         SELECT sf, bw, tx 
         FROM sessions 
         WHERE id = $1 
-          AND (sf IS NOT NULL OR bw IS NOT NULL OR tx IS NOT NULL)
+          AND (sf = 0 OR bw = 0 OR tx = 0)
     `, sessionId).Scan(&sf, &bw, &tx)
 	cnt := 0
 	err1 := r.db.QueryRow(`SELECT count FROM packets WHERE session_id = $1`, sessionId).Scan(&cnt)
