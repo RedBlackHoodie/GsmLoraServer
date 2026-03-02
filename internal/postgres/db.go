@@ -104,9 +104,9 @@ func (r *Repo) CreateSessionsTable() error {
 			start_time TIMESTAMP NOT NULL,
 			end_time TIMESTAMP,
 		    count INTEGER NOT NULL,
-		    sf    FLOAT,
-		    bw    FLOAT,
-		    tx 	  FLOAT
+		    sf    FLOAT	  NOT NULL,
+		    bw    FLOAT	  NOT NULL,
+		    tx 	  FLOAT	  NOT NULL
 		)`)
 	if err != nil {
 		return fmt.Errorf("failed to create sessions table: %w", err)
