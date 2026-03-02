@@ -189,13 +189,17 @@ func (r *Repo) Save(packet *models.Packet, sessionId int) error {
 
 func (r *Repo) SaveSession(session models.Session) error {
 	_, err := r.db.Exec("INSERT INTO SESSIONS "+
-		"(id, name, start_time, end_time, count) values ($1, $2, $3, $4, $5)",
+		"(id, name, start_time, end_time, count, sf, bw, tx) values ($1, $2, $3, $4, $5, $6, $7, $8)",
 		session.Id,
 		session.Name,
 		session.StartTime,
 		session.EndTime,
 		session.Count,
+		session.Sf,
+		session.Bandwidth,
+		session.Tx,
 	)
+
 	if err != nil {
 		return fmt.Errorf("failed to save session: %w", err)
 	}
