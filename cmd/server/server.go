@@ -389,7 +389,7 @@ func (s *Server) HandleGetMeasurementSessions(conn net.Conn) {
 		for _, session := range sessions {
 			var str string
 			if session.Bandwidth == 0 || session.Sf == 0 {
-				str = fmt.Sprintf("[%d, %s, %s, %s, %d, -, -, -]", session.Id, session.Name, session.StartTime, session.EndTime, session.Count)
+				str = fmt.Sprintf("[%d, %s, %s, %s, %d, -]", session.Id, session.Name, session.StartTime, session.EndTime, session.Count)
 			} else {
 				str = fmt.Sprintf("[%d, %s, %s, %s, %d, %f, %f, %f]", session.Id, session.Name, session.StartTime, session.EndTime, session.Count, session.Sf, session.Bandwidth, session.Tx)
 			}
