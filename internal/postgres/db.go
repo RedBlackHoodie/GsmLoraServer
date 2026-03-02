@@ -103,9 +103,9 @@ func (r *Repo) CreateSessionsTable() error {
 			name VARCHAR(100) NOT NULL,
 			start_time TIMESTAMP NOT NULL,
 			end_time TIMESTAMP,
-		    count INTEGER NOT NULL
-		    sf    FLOAT
-		    bw    FLOAT
+		    count INTEGER NOT NULL,
+		    sf    FLOAT,
+		    bw    FLOAT,
 		    tx 	  FLOAT
 		)`)
 	if err != nil {
